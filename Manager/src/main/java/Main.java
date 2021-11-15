@@ -50,7 +50,7 @@ public class Main {
 
     public static String findLocalAppManagerQueue(SqsClient sqsClient)
     {
-        String namePrefix = "lamqueue";
+        final String namePrefix = "lamqueue";
         ListQueuesRequest filterListRequest = ListQueuesRequest.builder()
                 .queueNamePrefix(namePrefix).build();
 
@@ -180,7 +180,6 @@ public class Main {
     }
 
     public static void main(String[] argv) {
-
         System.out.println("Hello From Manager");
         Region region = Region.US_EAST_1;
 
@@ -193,6 +192,7 @@ public class Main {
         SqsClient sqsClient = SqsClient.builder()
                 .region(region)
                 .build();
+
         String queueUrl = findLocalAppManagerQueue(sqsClient);
         if(queueUrl.equals("")){
             System.out.println("No Local-Manager queue found!");
@@ -201,7 +201,6 @@ public class Main {
 
         String tasksQueueURL = createQueue(sqsClient, "tasksqueue");
         String finishedTasksQueueURL = createQueue(sqsClient, "finishedtasksqueue");
-
 
         new Thread(() -> {
             processFinishedTasks(s3, sqsClient, finishedTasksQueueURL);

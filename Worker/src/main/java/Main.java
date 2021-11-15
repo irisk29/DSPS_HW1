@@ -1,72 +1,44 @@
-import org.apache.commons.io.FileUtils;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.rendering.ImageType;
-import org.apache.pdfbox.rendering.PDFRenderer;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.tools.imageio.ImageIOUtil;
-import org.fit.pdfdom.PDFDomTree;
-
-import java.awt.image.BufferedImage;
-import java.io.*;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import software.amazon.awssdk.services.sqs.model.Message;
+import java.sql.Timestamp;
 
 public class Main {
 
-    public static void convertPDFToImage()
-    {
-        //read from SQS1 the operation and the link to the pdf file
-        try
-        {
-            var pdfFilename = "picture.pdf";
-            var file = new File("C:\\Users\\irisk\\OneDrive\\Documents\\university\\fourth year - first semester\\DSPS\\hw1\\src\\main\\java\\picture.pdf");
-            PDDocument document = PDDocument.load(file);
-            PDFRenderer pdfRenderer = new PDFRenderer(document);
-            BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 300, ImageType.RGB);
-            // suffix in filename will be used as the file format
-            ImageIOUtil.writeImage(bim, pdfFilename + "-" + 0 + ".png", 300);
-            document.close();
-        }catch (IOException exception)
-        {
-            System.out.println(exception.getMessage());
-        }
-    }
-
-    public static void ConvertPDFToTextFile(){
-        try (InputStream is = new URL("http://www.bethelnewton.org/images/Passover_Guide_BOOKLET.pdf").openStream(); PDDocument doc = PDDocument.load(is)) {
-        /*var file = new File("C:\\Users\\irisk\\OneDrive\\Documents\\university\\fourth year - first semester\\DSPS\\hw1\\src\\main\\java\\try.pdf");
-        PDDocument doc = PDDocument.load(file);
-        String text = new PDFTextStripper().getText(doc);
-        FileUtils.writeStringToFile(new File("test.txt"), text, StandardCharsets.UTF_8);*/
-        /*FileUtils.copyURLToFile(
-                new URL("http://www.bethelnewton.org/images/Passover_Guide_BOOKLET.pdf"),
-                file);*/
-            //File file = new File("http://www.bethelnewton.org/images/Passover_Guide_BOOKLET.pdf");
-            String text = new PDFTextStripper().getText(doc);
-            FileUtils.writeStringToFile(new File("test.txt"), text, StandardCharsets.UTF_8);
-
-        } catch (IOException exception) {
-            System.out.println(exception.getMessage());
-        }
-
-    }
-
-    public static void ConvertPDFToHTML() {
+    public static void main(String[] argv) {
         try {
-            var file = new File("C:\\Users\\irisk\\OneDrive\\Documents\\university\\fourth year - first semester\\DSPS\\hw1\\src\\main\\java\\h1.pdf");
-            PDDocument pdf = PDDocument.load(file);
-            Writer output = new PrintWriter("pdf.html", StandardCharsets.UTF_8);
-            new PDFDomTree().writeText(pdf, output);
+            SQSMethods sqsMethods = SQSMethods.getInstance();
+            S3Methods s3Methods = S3Methods.getInstance();
+            final String tasksQueueName = "tasksqueue";
+            final String finishedTasksQueueName = "finishedtasksqueue";
+            final String tasksQueueUrl = sqsMethods.getQueueUrl(tasksQueueName);
+            final String finishedTasksQueueUrl = sqsMethods.getQueueUrl(finishedTasksQueueName);
 
-            output.close();
-        }catch (IOException exception)
-        {
-            System.out.println(exception.getMessage());
+            while (true) {
+                Message message = sqsMethods.receiveMessage(tasksQueueUrl);
+                String[] msgData = message.body().split("\\t");
+                String action = msgData[0];
+                String pdfStringUrl = msgData[1];
+
+                String resultFilePath = WorkerActions.doWorkerAction(action, pdfStringUrl);
+
+                final String bucketName = "finishedtasksbucket";
+                final String objectKey = "outputFile" + ProcessHandle.current().pid() + new Timestamp(System.currentTimeMillis());
+                if(!s3Methods.isBucketExist(bucketName))
+                    s3Methods.createBucket(bucketName);
+                s3Methods.putObject(bucketName, objectKey, resultFilePath);
+
+                String messageGroupId = "finishedtask";
+                // msg to manager
+                // prevPDFUrl $ s3 location (bucket name $ key name) $ action preformed
+                String msgBody = pdfStringUrl + "$" + bucketName + "$" + objectKey + "$" + action;
+                sqsMethods.sendMessage(finishedTasksQueueUrl, messageGroupId, msgBody);
+
+                sqsMethods.deleteMessage(tasksQueueUrl, message);
+            }
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
-    }
 
-    public static void main(String[] argv){
-        ConvertPDFToTextFile();
     }
 }
 
