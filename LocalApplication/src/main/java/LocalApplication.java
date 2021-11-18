@@ -24,107 +24,105 @@ import java.util.List;
 import java.util.Map;
 
 public class LocalApplication {
-    public static final String POLICY_DOCUMENT =
-            """
-                      {
-                                  "Version": "2012-10-17",
-                                  "Statement": [
-                                      {
-                                          "Effect": "Allow",
-                                          "Action": [
-                                              "s3:*",
-                                              "s3-object-lambda:*",
-                              				"sqs:*",
-                              				"ec2:*",
-                              				"elasticloadbalancing:*",
-                              				"cloudwatch:*",
-                              				"autoscaling:*"
-                                          ],
-                                          "Resource": "*"
-                                      },
-                              		{
-                                          "Effect": "Allow",
-                                          "Action": "iam:CreateServiceLinkedRole",
-                                          "Resource": "*",
-                                          "Condition": {
-                                              "StringEquals": {
-                                                  "iam:AWSServiceName": [
-                                                      "autoscaling.amazonaws.com",
-                                                      "ec2scheduled.amazonaws.com",
-                                                      "elasticloadbalancing.amazonaws.com",
-                                                      "spot.amazonaws.com",
-                                                      "spotfleet.amazonaws.com",
-                                                      "transitgateway.amazonaws.com"
-                                                  ]
-                                              }
-                                          }
-                                      },
-                              		{
-                              		  "Effect": "Allow",
-                              		  "Principal": {
-                              			"Service": "ec2.amazonaws.com"
-                              		  },
-                              		  "Action": "sts:AssumeRole"
-                              		}
-                                  ]
-                              }
-                    """;
+//    public static final String POLICY_DOCUMENT =
+//            """
+//                      {
+//                                  "Version": "2012-10-17",
+//                                  "Statement": [
+//                                      {
+//                                          "Effect": "Allow",
+//                                          "Action": [
+//                                              "s3:*",
+//                                              "s3-object-lambda:*",
+//                              				"sqs:*",
+//                              				"ec2:*",
+//                              				"elasticloadbalancing:*",
+//                              				"cloudwatch:*",
+//                              				"autoscaling:*"
+//                                          ],
+//                                          "Resource": "*"
+//                                      },
+//                              		{
+//                                          "Effect": "Allow",
+//                                          "Action": "iam:CreateServiceLinkedRole",
+//                                          "Resource": "*",
+//                                          "Condition": {
+//                                              "StringEquals": {
+//                                                  "iam:AWSServiceName": [
+//                                                      "autoscaling.amazonaws.com",
+//                                                      "ec2scheduled.amazonaws.com",
+//                                                      "elasticloadbalancing.amazonaws.com",
+//                                                      "spot.amazonaws.com",
+//                                                      "spotfleet.amazonaws.com",
+//                                                      "transitgateway.amazonaws.com"
+//                                                  ]
+//                                              }
+//                                          }
+//                                      },
+//                              		{
+//                              		  "Effect": "Allow",
+//                              		  "Principal": {
+//                              			"Service": "ec2.amazonaws.com"
+//                              		  },
+//                              		  "Action": "sts:AssumeRole"
+//                              		}
+//                                  ]
+//                              }
+//                    """;
+//
+//    public static String createIAMRole(IamClient iam, String rolename) {
+//        try {
+//            CreateRoleRequest request = CreateRoleRequest.builder()
+//                    .roleName(rolename)
+//                    .assumeRolePolicyDocument(POLICY_DOCUMENT)
+//                    .description("Created using the AWS SDK for Java")
+//                    .build();
+//
+//            CreateRoleResponse response = iam.createRole(request);
+//            System.out.println("The ARN of the role is "+response.role().arn());
+//            return response.role().arn();
+//        } catch (IamException e) {
+//            System.err.println(e.awsErrorDetails().errorMessage());
+//            System.exit(1);
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        return "";
+//    }
 
-    public static String createIAMRole(IamClient iam, String rolename) {
-
-        try {
-
-            CreateRoleRequest request = CreateRoleRequest.builder()
-                    .roleName(rolename)
-                    .assumeRolePolicyDocument(POLICY_DOCUMENT)
-                    .description("Created using the AWS SDK for Java")
-                    .build();
-
-            CreateRoleResponse response = iam.createRole(request);
-            System.out.println("The ARN of the role is "+response.role().arn());
-            return response.role().arn();
-        } catch (IamException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "";
-    }
-
-    public static void createEC2KeyPair(Ec2Client ec2, String keyName) {
-
-        try {
-            CreateKeyPairRequest request = CreateKeyPairRequest.builder()
-                    .keyName(keyName).build();
-
-            ec2.createKeyPair(request);
-            System.out.printf(
-                    "Successfully created key pair named %s",
-                    keyName);
-
-        } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        }
-    }
+//    public static void createEC2KeyPair(Ec2Client ec2, String keyName) {
+//
+//        try {
+//            CreateKeyPairRequest request = CreateKeyPairRequest.builder()
+//                    .keyName(keyName).build();
+//
+//            ec2.createKeyPair(request);
+//            System.out.printf(
+//                    "Successfully created key pair named %s",
+//                    keyName);
+//
+//        } catch (Ec2Exception e) {
+//            System.err.println(e.awsErrorDetails().errorMessage());
+//            System.exit(1);
+//        }
+//    }
 
     public static String createEC2ManagerInstance(Ec2Client ec2,String name, String amiId ) {
 
-        IamClient iam = IamClient.builder()
-                .region(Region.AWS_GLOBAL)
-                .build();
-
-        String arn = createIAMRole(iam, "ManagerRole");
-        String key_name = "dspsHw";
-        createEC2KeyPair(ec2, key_name);
+//        IamClient iam = IamClient.builder()
+//                .region(Region.AWS_GLOBAL)
+//                .build();
+//
+//        String arn = createIAMRole(iam, "ManagerRole");
+//        String key_name = "dspsHw";
+//        createEC2KeyPair(ec2, key_name);
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(1)
                 .minCount(1)
-                .keyName(key_name)
-                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
+//                .keyName(key_name)
+//                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
                 /*.userData("#!/bin/sh\n" +
                         "sudo yum install java-1.8.0-openjdk\n" +
                         "aws s3 cp s3://bucket/folder/manager.jar .\n" +
@@ -134,30 +132,30 @@ public class LocalApplication {
         RunInstancesResponse response = ec2.runInstances(runRequest);
         String instanceId = response.instances().get(0).instanceId();
 
-        Tag tag = Tag.builder()
-                .key("M") //for manager
-                .value(name)
-                .build();
-
-        CreateTagsRequest tagRequest = CreateTagsRequest.builder()
-                .resources(instanceId)
-                .tags(tag)
-                .build();
-
-        try {
-            ec2.createTags(tagRequest);
-            System.out.printf(
-                    "Successfully started EC2 Instance %s based on AMI %s\n",
-                    instanceId, amiId);
+//        Tag tag = Tag.builder()
+//                .key("M") //for manager
+//                .value(name)
+//                .build();
+//
+//        CreateTagsRequest tagRequest = CreateTagsRequest.builder()
+//                .resources(instanceId)
+//                .tags(tag)
+//                .build();
+//
+//        try {
+//            ec2.createTags(tagRequest);
+//            System.out.printf(
+//                    "Successfully started EC2 Instance %s based on AMI %s\n",
+//                    instanceId, amiId);
 
             return instanceId;
-
-        } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        }
-
-        return "";
+//
+//        } catch (Ec2Exception e) {
+//            System.err.println(e.awsErrorDetails().errorMessage());
+//            System.exit(1);
+//        }
+//
+//        return "";
     }
 
     public static void startInstance(Ec2Client ec2, String instanceId) {
@@ -496,7 +494,7 @@ public class LocalApplication {
             int n = Integer.parseInt(argv[2]);
             boolean terminate = argv.length > 3;
 
-            String ami = "ami-01cc34ab2709337aa";
+            String ami = "ami-0b2ce1f6d9961367f";
             String name = "EC2ManagerInstance";
             Region region = Region.US_EAST_1;
 
