@@ -38,7 +38,7 @@ public class Task implements Runnable{
         String finalMsgQueueName = taskBody[2];
         String numMsgPerWorker = taskBody[3];
 
-        int fileSize = readTaskFile(sqsClient, s3, bucketName, key_name, tasksQueueURL, finalMsgQueueName);
+        int fileSize = sendTaskMessages(sqsClient, s3, bucketName, key_name, tasksQueueURL, finalMsgQueueName);
         int numOfNeededWorkers = fileSize / Integer.parseInt(numMsgPerWorker);
 
         createWorkersPerTasks(ec2, numOfNeededWorkers);
@@ -52,13 +52,11 @@ public class Task implements Runnable{
         if(numOfWorkersToCreate <= 0) return; //no need to create
 
         String ami = "ami-01cc34ab2709337aa";
-        String name = "EC2ManagerInstance";
+        String name = "EC2WorkerInstance";
         createAndStartEC2WorkerInstance(ec2, name, ami, numOfWorkersToCreate);
-
     }
 
-    public static void createAndStartEC2WorkerInstance(Ec2Client ec2,String name, String amiId, int maxCount ) {
-
+    public static void createAndStartEC2WorkerInstance(Ec2Client ec2,String name, String amiId, int maxCount) {
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
@@ -75,7 +73,7 @@ public class Task implements Runnable{
         List<Instance> instances = response.instances();
 
         Tag tag = Tag.builder()
-                .key("W ") //for worker
+                .key("W") //for worker
                 .value(name)
                 .build();
 
@@ -203,7 +201,7 @@ public class Task implements Runnable{
         }
     }
 
-    public static int readTaskFile(SqsClient sqsClient, S3Client s3, String bucketName, String key_name,
+    public static int sendTaskMessages(SqsClient sqsClient, S3Client s3, String bucketName, String key_name,
                                    String queueUrl, String finalMsgQueueName)
     {
         File file = getObjectBytes(s3, bucketName, key_name, "Task" + counter + ".txt");

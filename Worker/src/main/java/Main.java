@@ -17,6 +17,7 @@ public class Main {
                 String[] msgData = message.body().split("\\t");
                 String action = msgData[0];
                 String pdfStringUrl = msgData[1];
+                String localAppID = msgData[2];
 
                 String resultFilePath = WorkerActions.doWorkerAction(action, pdfStringUrl);
 
@@ -29,7 +30,7 @@ public class Main {
                 String messageGroupId = "finishedtask";
                 // msg to manager
                 // prevPDFUrl $ s3 location (bucket name $ key name) $ action preformed
-                String msgBody = pdfStringUrl + "$" + bucketName + "$" + objectKey + "$" + action;
+                String msgBody = pdfStringUrl + "$" + bucketName + "$" + objectKey + "$" + action + "$" + localAppID;
                 sqsMethods.sendMessage(finishedTasksQueueUrl, messageGroupId, msgBody);
 
                 sqsMethods.deleteMessage(tasksQueueUrl, message);

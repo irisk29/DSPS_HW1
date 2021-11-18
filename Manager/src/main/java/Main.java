@@ -118,60 +118,44 @@ public class Main {
         }
     }
 
-    public static String putS3Object(S3Client s3,
-                                     String bucketName,
-                                     String objectKey,
-                                     File summaryFile) {
-
-        try {
-
-            PutObjectRequest putOb = PutObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(objectKey)
-                    .build();
-
-            PutObjectResponse response = s3.putObject(putOb,
-                    RequestBody.fromFile(summaryFile));
-
-            return response.eTag();
-
-        } catch (S3Exception e) {
-            System.err.println(e.getMessage());
-            System.exit(1);
-        }
-        return "";
-    }
-
     /*message from worker will be in the format - <original_pdf_url, the S3 url of the new
     image file, operation that was performed, finalMsgQueueName>
     where finalMsgQueueName represents the queue name between local application and the manager*/
     public static void processFinishedTasks(S3Client s3, SqsClient sqsClient, String finishedTasksQueueURL)
     {
+        S3Methods s3Methods = S3Methods.getInstance();
+        SQSMethods sqsMethods = SQSMethods.getInstance();
+
         while(gotTerminate)
         {
             Message finishedTask = receiveMessages(sqsClient, finishedTasksQueueURL).get(0); //reads only 1 msg
             String[] msgBody = finishedTask.body().split("\\$");
             String original_pdf_url = msgBody[0];
-            String s3_url = msgBody[1];
-            String operation = msgBody[2];
-            String finalMsgQueueName = msgBody[3];
+            String bucketName = msgBody[1];
+            String keyName = msgBody[2];
+            String operation = msgBody[3];
+            String finalMsgQueueName = msgBody[4];
             int fileSize = map.get(finalMsgQueueName);
             try
             {
-                File f = new File(finishedTasksQueueURL + ".txt");
+                File f = new File(finalMsgQueueName + ".txt");
                 PrintWriter out = new PrintWriter(new FileWriter(f, true));
-                String result = original_pdf_url + "$" + s3_url + "$" + operation;
+                String result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation;
                 out.println(result);
                 out.close();
                 int currFileSize = getFileSize(f);
                 if(currFileSize == fileSize) //finished all the tasks for certain local application
                 {
-                    String bucketName = "finishedtasks" + System.currentTimeMillis();
+                    String bucket_name = "finishedtasksbucket";
+                    if(!s3Methods.isBucketExist(bucket_name))
+                        s3Methods.createBucket(bucket_name);
                     String key_name = finalMsgQueueName + System.currentTimeMillis();
-                    putS3Object(s3, bucketName, key_name, f); //uploading the summary file to s3
-                    String doneMsg = bucketName + "$" + key_name; //location of the summary file in s3
+                    s3Methods.putObject(bucketName, key_name, f); //uploading the summary file to s3
+
+                    String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
                     SendMessage(sqsClient, finishedTasksQueueURL, doneMsg);
                 }
+                sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
             }catch (Exception e)
             {
                 System.out.println(e.getMessage());
@@ -220,7 +204,7 @@ public class Main {
             Message msgToProcess = messages.get(0);
             String[] msg = msgToProcess.body().split("\\$");
             int fileSize = Integer.parseInt(msg[msg.length - 1]);
-            String finalMsgQueueName = msg[3];
+            String finalMsgQueueName = msg[2];
             map.putIfAbsent(finalMsgQueueName, fileSize);
             Task task = new Task(ec2, sqsClient, s3, tasksQueueURL, msgToProcess);
             pool.execute(task);
@@ -228,6 +212,7 @@ public class Main {
 
         //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
         //TODO: 1. clean resources 2. kill workers 3. kill himself 4. terminate pool
+        
 
     }
 }
