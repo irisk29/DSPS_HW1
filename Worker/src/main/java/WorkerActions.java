@@ -12,22 +12,18 @@ import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 
 public class WorkerActions {
     private static String convertPDFToImage(URL url)
     {
-        try {
-            BufferedImage img = ImageIO.read(url);
-            File file = new File("downloaded.jpg");
-            ImageIO.write(img, "png", file);
-
-            PDDocument document = PDDocument.load(file);
+        try (InputStream is = url.openStream(); PDDocument document = PDDocument.load(is)) {
             PDFRenderer pdfRenderer = new PDFRenderer(document);
             BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 300, ImageType.RGB);
-            // suffix in filename will be used as the file format
-            ImageIOUtil.writeImage(bim, file.getName(), 300);
+            File outputFile = new File(url.getFile());
+            ImageIOUtil.writeImage(bim, outputFile.getName(), 300);
             document.close();
-            return file.getAbsolutePath();
+            return outputFile.getAbsolutePath();
         } catch (IOException exception) {
             System.out.println(exception.getMessage());
             return null;
@@ -47,13 +43,12 @@ public class WorkerActions {
     }
 
     private static String convertPDFToHTML(URL url) {
-        try {
-            File file = new File(url.getFile());
-            PDDocument pdf = PDDocument.load(file);
-            Writer output = new PrintWriter(file.getName(), StandardCharsets.UTF_8);
-            new PDFDomTree().writeText(pdf, output);
+        try (InputStream is = url.openStream(); PDDocument document = PDDocument.load(is)) {
+            File outputFile = new File(url.getFile());
+            Writer output = new PrintWriter(outputFile.getName(), StandardCharsets.UTF_8);
+            new PDFDomTree().writeText(document, output);
             output.close();
-            return file.getAbsolutePath();
+            return outputFile.getAbsolutePath();
         } catch (IOException exception) {
             System.out.println(exception.getMessage());
             return null;

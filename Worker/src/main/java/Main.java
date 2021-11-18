@@ -29,7 +29,7 @@ public class Main {
 
                 String messageGroupId = "finishedtask";
                 // msg to manager
-                // prevPDFUrl $ s3 location (bucket name $ key name) $ action preformed
+                // prevPDFUrl $ s3 location (bucket name $ key name) $ action preformed $ localAppID for manager
                 String msgBody = pdfStringUrl + "$" + bucketName + "$" + objectKey + "$" + action + "$" + localAppID;
                 sqsMethods.sendMessage(finishedTasksQueueUrl, messageGroupId, msgBody);
 

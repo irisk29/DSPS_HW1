@@ -1,6 +1,11 @@
 import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.iam.IamClient;
+import software.amazon.awssdk.services.iam.model.CreateRoleRequest;
+import software.amazon.awssdk.services.iam.model.CreateRoleResponse;
+import software.amazon.awssdk.services.iam.model.IamException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -18,6 +23,51 @@ public class Task implements Runnable{
     S3Client s3;
     String tasksQueueURL;
     static int counter = 0;
+    public static final String POLICY_DOCUMENT =
+            """
+                      {
+                                  "Version": "2012-10-17",
+                                  "Statement": [
+                                      {
+                                          "Effect": "Allow",
+                                          "Action": [
+                                              "s3:*",
+                                              "s3-object-lambda:*",
+                              				"sqs:*",
+                              				"ec2:*",
+                              				"elasticloadbalancing:*",
+                              				"cloudwatch:*",
+                              				"autoscaling:*"
+                                          ],
+                                          "Resource": "*"
+                                      },
+                              		{
+                                          "Effect": "Allow",
+                                          "Action": "iam:CreateServiceLinkedRole",
+                                          "Resource": "*",
+                                          "Condition": {
+                                              "StringEquals": {
+                                                  "iam:AWSServiceName": [
+                                                      "autoscaling.amazonaws.com",
+                                                      "ec2scheduled.amazonaws.com",
+                                                      "elasticloadbalancing.amazonaws.com",
+                                                      "spot.amazonaws.com",
+                                                      "spotfleet.amazonaws.com",
+                                                      "transitgateway.amazonaws.com"
+                                                  ]
+                                              }
+                                          }
+                                      },
+                              		{
+                              		  "Effect": "Allow",
+                              		  "Principal": {
+                              			"Service": "ec2.amazonaws.com"
+                              		  },
+                              		  "Action": "sts:AssumeRole"
+                              		}
+                                  ]
+                              }
+                    """;
 
     public Task(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, String tasksQueueURL, Message task)
     {
@@ -26,6 +76,26 @@ public class Task implements Runnable{
         this.s3 = s3;
         this.sqsClient = sqsClient;
         this.tasksQueueURL = tasksQueueURL;
+    }
+
+    public static String createIAMRole(IamClient iam, String rolename) {
+        try {
+            CreateRoleRequest request = CreateRoleRequest.builder()
+                    .roleName(rolename)
+                    .assumeRolePolicyDocument(POLICY_DOCUMENT)
+                    .description("Created using the AWS SDK for Java")
+                    .build();
+
+            CreateRoleResponse response = iam.createRole(request);
+            System.out.println("The ARN of the role is "+response.role().arn());
+            return response.role().arn();
+        } catch (IamException e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+            System.exit(1);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "";
     }
 
     public static void createTasksAndWorkers(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, Message taskMsg,
@@ -57,12 +127,16 @@ public class Task implements Runnable{
     }
 
     public static void createAndStartEC2WorkerInstance(Ec2Client ec2,String name, String amiId, int maxCount) {
+        IamClient iam = IamClient.builder()
+                .region(Region.AWS_GLOBAL)
+                .build();
+        String arn = createIAMRole(iam, "WorkerRole");
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(maxCount)
                 .minCount(1)
-                //.iamInstanceProfile(IamInstanceProfileSpecification.builder().arn("arn:aws:iam::935282201937:instance-profile/default").build())
+                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
                 /*.userData("#!/bin/sh\n" +
                         "sudo yum install java-1.8.0-openjdk\n" +
                         "aws s3 cp s3://bucket/folder/manager.jar .\n" +
