@@ -290,8 +290,8 @@ public class Task implements Runnable{
             int id = 0;
             for(String msgBody : msgsBody)
             {
-                messages.add(SendMessageBatchRequestEntry.builder().id("id" + id + "-" + String.valueOf(batchCounter)).messageBody(msgBody)
-                        .messageGroupId("finishedtask" + batchCounter).messageDeduplicationId("finishedtaskdup"  + batchCounter).build());
+                messages.add(SendMessageBatchRequestEntry.builder().id("id" + id + "-" + batchCounter).messageBody(msgBody)
+                        .messageGroupId("finishedtask" + id + batchCounter).messageDeduplicationId("finishedtaskdup" + id + batchCounter).build());
                 id++;
             }
             batchCounter++;
@@ -299,7 +299,6 @@ public class Task implements Runnable{
                     .queueUrl(queueUrl)
                     .entries(messages)
                     .build();
-            sqsClient.sendMessageBatch(sendMessageBatchRequest);
             System.out.println("Messages has been sent successfully as a batch " + batchCounter);
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
