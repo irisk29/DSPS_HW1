@@ -23,41 +23,9 @@ public class Main {
     static ConcurrentHashMap<String, Integer> map
             = new ConcurrentHashMap<>();
 
-    public static List<Message> receiveMessages(SqsClient sqsClient, String queueUrl) {
-
-        try {
-            ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .maxNumberOfMessages(1)
-                    .build();
-            return sqsClient.receiveMessage(receiveMessageRequest).messages();
-        } catch (SqsException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        }
-        return null;
-    }
-
-    public static boolean gotTerminationMsg(List<Message> messages)
+    public static boolean gotTerminationMsg(Message message)
     {
-        for(Message msg : messages)
-        {
-            if(msg.body().equals("Terminate"))
-                return true;
-        }
-        return false;
-    }
-
-    public static String findLocalAppManagerQueue(SqsClient sqsClient)
-    {
-        final String namePrefix = "lamqueue";
-        ListQueuesRequest filterListRequest = ListQueuesRequest.builder()
-                .queueNamePrefix(namePrefix).build();
-
-        ListQueuesResponse listQueuesFilteredResponse = sqsClient.listQueues(filterListRequest);
-        System.out.println("Queue URLs with prefix: " + namePrefix);
-        List<String> urls = listQueuesFilteredResponse.queueUrls();
-        return urls.isEmpty() ? "" : urls.get(0);
+        return message.body().equals("Terminate");
     }
 
     public static String createQueue(SqsClient sqsClient, String queueNameToCreate)
@@ -123,24 +91,42 @@ public class Main {
     where finalMsgQueueName represents the queue name between local application and the manager*/
     public static void processFinishedTasks(S3Client s3, SqsClient sqsClient, String finishedTasksQueueURL)
     {
+        System.out.println("In start of processFinishedTasks");
         S3Methods s3Methods = S3Methods.getInstance();
         SQSMethods sqsMethods = SQSMethods.getInstance();
 
-        while(gotTerminate)
+        while(!gotTerminate)
         {
-            Message finishedTask = receiveMessages(sqsClient, finishedTasksQueueURL).get(0); //reads only 1 msg
+            System.out.println("Waiting for finished tasks");
+            Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL); //reads only 1 msg
+            System.out.println("got finished task");
             String[] msgBody = finishedTask.body().split("\\$");
-            String original_pdf_url = msgBody[0];
-            String bucketName = msgBody[1];
-            String keyName = msgBody[2];
-            String operation = msgBody[3];
-            String finalMsgQueueName = msgBody[4];
+
+            String result = "", finalMsgQueueName = "";
+            if(msgBody[0].equals("taskfailed")) {
+                // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
+                String action = msgBody[1];
+                String pdfStringUrl = msgBody[2];
+                finalMsgQueueName = msgBody[3];
+                String exceptionDesc = msgBody[4];
+                result = action + "$" + pdfStringUrl + "$" + exceptionDesc;
+            }
+            else {
+                String original_pdf_url = msgBody[0];
+                String bucketName = msgBody[1];
+                String keyName = msgBody[2];
+                String operation = msgBody[3];
+                finalMsgQueueName = msgBody[4];
+                result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation;
+            }
+
+            System.out.println("result: " + result + " finalMsgQueueName: " + finalMsgQueueName);
+
             int fileSize = map.get(finalMsgQueueName);
             try
             {
                 File f = new File(finalMsgQueueName + ".txt");
                 PrintWriter out = new PrintWriter(new FileWriter(f, true));
-                String result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation;
                 out.println(result);
                 out.close();
                 int currFileSize = getFileSize(f);
@@ -150,13 +136,15 @@ public class Main {
                     if(!s3Methods.isBucketExist(bucket_name))
                         s3Methods.createBucket(bucket_name);
                     String key_name = finalMsgQueueName + System.currentTimeMillis();
-                    s3Methods.putObject(bucketName, key_name, f); //uploading the summary file to s3
+                    s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
 
                     String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
                     SendMessage(sqsClient, finishedTasksQueueURL, doneMsg);
+                    System.out.println("send done msg: " + doneMsg + " to queue: " + finishedTasksQueueURL);
                 }
                 sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
-            }catch (Exception e)
+                System.out.println("delete msg: " + finishedTask + " from queue: " + finishedTasksQueueURL);
+            } catch (Exception e)
             {
                 System.out.println(e.getMessage());
             }
@@ -166,6 +154,8 @@ public class Main {
     public static void main(String[] argv) {
         System.out.println("Hello From Manager");
         Region region = Region.US_EAST_1;
+
+        SQSMethods sqsMethods = SQSMethods.getInstance();
 
         Ec2Client ec2 = Ec2Client.builder()
                 .region(region)
@@ -177,14 +167,14 @@ public class Main {
                 .region(region)
                 .build();
 
-        String queueUrl = findLocalAppManagerQueue(sqsClient);
-        if(queueUrl.equals("")){
-            System.out.println("No Local-Manager queue found!");
-            return;
-        }
+        final String queueNamePrefix = "lamqueue";
+        String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);
+        System.out.println("Local-Manager queue found!");
 
         String tasksQueueURL = createQueue(sqsClient, "tasksqueue");
         String finishedTasksQueueURL = createQueue(sqsClient, "finishedtasksqueue");
+
+        System.out.println("is terminated: " + gotTerminate);
 
         new Thread(() -> {
             processFinishedTasks(s3, sqsClient, finishedTasksQueueURL);
@@ -194,19 +184,29 @@ public class Main {
         ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
         while(true)
         {
-            List<Message> messages = receiveMessages(sqsClient, queueUrl);
-            if(gotTerminationMsg(messages))
+            Message msgToProcess = sqsMethods.receiveMessage(queueUrl);
+            if(gotTerminationMsg(msgToProcess))
             {
                 System.out.println("found termination msg - need to finish");
                 gotTerminate = true;
                 break;
             }
-            Message msgToProcess = messages.get(0);
+
+            ChangeMessageVisibilityRequest req = ChangeMessageVisibilityRequest.builder()
+                    .queueUrl(queueUrl)
+                    .receiptHandle(msgToProcess.receiptHandle())
+                    .visibilityTimeout(300)
+                    .build();
+            sqsClient.changeMessageVisibility(req);
+
+            System.out.println("got new local app message to process");
+
             String[] msg = msgToProcess.body().split("\\$");
             int fileSize = Integer.parseInt(msg[msg.length - 1]);
             String finalMsgQueueName = msg[2];
+            System.out.println("finalMsgQueueName: " + finalMsgQueueName + "filesize: " + fileSize);
             map.putIfAbsent(finalMsgQueueName, fileSize);
-            Task task = new Task(ec2, sqsClient, s3, tasksQueueURL, msgToProcess);
+            Task task = new Task(ec2, sqsClient, s3, tasksQueueURL, msgToProcess, queueUrl);
             pool.execute(task);
         }
 

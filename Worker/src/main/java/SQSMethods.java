@@ -25,15 +25,16 @@ public class SQSMethods {
 
     // returns url of a queue if exists
     // if not, returns ""
-    public String getQueueUrl(String queuePrefixName) throws NoSuchElementException {
-        ListQueuesRequest filterListRequest = ListQueuesRequest.builder()
-                .queueNamePrefix(queuePrefixName).build();
-        ListQueuesResponse listQueuesFilteredResponse = sqsClient.listQueues(filterListRequest);
-        List<String> urls = listQueuesFilteredResponse.queueUrls();
-
-        if(urls.isEmpty())
-            throw new NoSuchElementException();
-        // should be only one - unique names
+    public String getQueueUrl(String queueNamePrefix)
+    {
+        List<String> urls;
+        do {
+            ListQueuesRequest filterListRequest = ListQueuesRequest.builder()
+                    .queueNamePrefix(queueNamePrefix).build();
+            ListQueuesResponse listQueuesFilteredResponse = this.sqsClient.listQueues(filterListRequest);
+            urls = listQueuesFilteredResponse.queueUrls();
+        } while(urls.isEmpty());
+        // returns the lam queue url
         return urls.get(0);
     }
 

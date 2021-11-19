@@ -14,6 +14,8 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 public class Task implements Runnable{
@@ -22,7 +24,9 @@ public class Task implements Runnable{
     SqsClient sqsClient;
     S3Client s3;
     String tasksQueueURL;
+    String lamQueueURL;
     static int counter = 0;
+    static int batchCounter = 0;
     public static final String POLICY_DOCUMENT =
             """
                       {
@@ -69,13 +73,14 @@ public class Task implements Runnable{
                               }
                     """;
 
-    public Task(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, String tasksQueueURL, Message task)
+    public Task(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, String tasksQueueURL, Message task, String lamQueueURL)
     {
         this.task = task;
         this.ec2 = ec2;
         this.s3 = s3;
         this.sqsClient = sqsClient;
         this.tasksQueueURL = tasksQueueURL;
+        this.lamQueueURL = lamQueueURL;
     }
 
     public static String createIAMRole(IamClient iam, String rolename) {
@@ -107,6 +112,7 @@ public class Task implements Runnable{
         String key_name = taskBody[1];
         String finalMsgQueueName = taskBody[2];
         String numMsgPerWorker = taskBody[3];
+        System.out.println(bucketName + " " + key_name + " " + finalMsgQueueName + " " + numMsgPerWorker);
 
         int fileSize = sendTaskMessages(sqsClient, s3, bucketName, key_name, tasksQueueURL, finalMsgQueueName);
         int numOfNeededWorkers = fileSize / Integer.parseInt(numMsgPerWorker);
@@ -119,7 +125,11 @@ public class Task implements Runnable{
         int numOfCurrWorkers = findRunningWorkersEC2Instances(ec2);
         int numOfWorkersToCreate = Math.min(numOfNeededWorkers , 20 - 1 - 1) - numOfCurrWorkers;
         //20 - 1 - 1: max allowed is 19 and 1 for manager
-        if(numOfWorkersToCreate <= 0) return; //no need to create
+        if(numOfWorkersToCreate <= 0) {
+            System.out.println("No need to create more workers!");
+            return; //no need to create
+        }
+        System.out.println("need to create " + numOfWorkersToCreate + " more workers!");
 
         String ami = "ami-01cc34ab2709337aa";
         String name = "EC2WorkerInstance";
@@ -223,13 +233,12 @@ public class Task implements Runnable{
                     }
                 }
                 nextToken = response.nextToken();
-
             } while (nextToken != null);
+
+            return numOfWorkers;
         } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
+            return numOfWorkers;
         }
-        return  numOfWorkers;
     }
 
     public static File getObjectBytes (S3Client s3, String bucketName, String keyName, String outputFile ) {
@@ -260,7 +269,7 @@ public class Task implements Runnable{
         return null;
     }
 
-    public static void SendMessage(SqsClient sqsClient, String queueUrl , String msgBody)
+    public static void SendMessage(SqsClient sqsClient, String queueUrl, String msgBody)
     {
         try {
             sqsClient.sendMessage(SendMessageRequest.builder()
@@ -275,22 +284,55 @@ public class Task implements Runnable{
         }
     }
 
-    public static int sendTaskMessages(SqsClient sqsClient, S3Client s3, String bucketName, String key_name,
-                                   String queueUrl, String finalMsgQueueName)
+    public static void sendBatchMessages(SqsClient sqsClient, String queueUrl, List<String> msgsBody) {
+        try {
+            Collection<SendMessageBatchRequestEntry> messages = new ArrayList<>();
+            int id = 0;
+            for(String msgBody : msgsBody)
+            {
+                messages.add(SendMessageBatchRequestEntry.builder().id("id" + id + "-" + String.valueOf(batchCounter)).messageBody(msgBody)
+                        .messageGroupId("finishedtask" + batchCounter).messageDeduplicationId("finishedtaskdup"  + batchCounter).build());
+                id++;
+            }
+            batchCounter++;
+            SendMessageBatchRequest sendMessageBatchRequest = SendMessageBatchRequest.builder()
+                    .queueUrl(queueUrl)
+                    .entries(messages)
+                    .build();
+            sqsClient.sendMessageBatch(sendMessageBatchRequest);
+            System.out.println("Messages has been sent successfully as a batch " + batchCounter);
+        } catch (SqsException e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+    }
+
+
+    public static int sendTaskMessages(SqsClient sqsClient, S3Client s3, String bucketName, String key_name, String queueUrl, String finalMsgQueueName)
     {
         File file = getObjectBytes(s3, bucketName, key_name, "Task" + counter + ".txt");
+        System.out.println("create file in manager");
         counter++;
         int fileSize = 0;
+        List<String> messages = new ArrayList<>();
         try {
             try (BufferedReader br = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = br.readLine()) != null) {
+                    if(messages.size() == 10) {
+                        sendBatchMessages(sqsClient, queueUrl, messages);
+                        messages.clear();
+                    }
                     //finalMsgQueueName - to know to which local app we are doing the task for
                     String msgBody = line + "\t" + finalMsgQueueName;
-                    SendMessage(sqsClient, queueUrl, msgBody);
+                    messages.add(msgBody);
+                    //SendMessage(sqsClient, queueUrl, msgBody);
                     fileSize++;
                 }
             }
+            if(!messages.isEmpty())
+                sendBatchMessages(sqsClient, queueUrl, messages);
+
+            System.out.println("file size is: " + fileSize);
             return fileSize;
         }catch (Exception exception)
         {
@@ -299,14 +341,14 @@ public class Task implements Runnable{
         return 0;
     }
 
-    public static void deleteMessage(SqsClient sqsClient, String queueUrl,  Message message) {
+    public static void deleteMessage(SqsClient sqsClient, String queueUrl, Message message) {
         try {
             DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
                     .queueUrl(queueUrl)
                     .receiptHandle(message.receiptHandle())
                     .build();
             sqsClient.deleteMessage(deleteMessageRequest);
-
+            System.out.println("deleted local app message");
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
             System.exit(1);
@@ -327,6 +369,6 @@ public class Task implements Runnable{
     @Override
     public void run() {
         createTasksAndWorkers(ec2,sqsClient, s3, task, tasksQueueURL);
-        deleteMessage(sqsClient, tasksQueueURL, task); //done processing the request from localapp
+        deleteMessage(sqsClient, lamQueueURL, task); //done processing the request from localapp
     }
 }

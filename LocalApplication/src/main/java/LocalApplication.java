@@ -16,8 +16,11 @@ import software.amazon.awssdk.services.s3.waiters.S3Waiter;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 import software.amazon.awssdk.services.iam.IamClient;
+import org.apache.commons.codec.binary.Base64;
+
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
@@ -116,6 +119,11 @@ public class LocalApplication {
 //        String arn = createIAMRole(iam, "ManagerRole");
 //        String key_name = "dspsHw";
 //        createEC2KeyPair(ec2, key_name);
+        String userData = """
+                #!/bin/sh
+                sudo rm Manager.jar
+                aws s3 cp s3://managerjarbucket/Manager.jar .
+                java -jar ./Manager.jar""";
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
@@ -123,10 +131,7 @@ public class LocalApplication {
                 .minCount(1)
 //                .keyName(key_name)
 //                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
-                /*.userData("#!/bin/sh\n" +
-                        "sudo yum install java-1.8.0-openjdk\n" +
-                        "aws s3 cp s3://bucket/folder/manager.jar .\n" +
-                        "java -jar /home/ubuntu/manager.jar")*/
+//                .userData(Base64.encodeBase64String(userData.getBytes(StandardCharsets.UTF_8)))
                 .build();
 
         RunInstancesResponse response = ec2.runInstances(runRequest);
@@ -295,12 +300,11 @@ public class LocalApplication {
                 nextToken = response.nextToken();
 
             } while (nextToken != null);
+            return false;
 
         } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
+            return false;
         }
-        return false;
     }
 
     public static String GetOrCreateTasksQueue(SqsClient sqsClient)
@@ -378,6 +382,7 @@ public class LocalApplication {
                     .messageGroupId("dotask")
                     .messageBody(msgBody) //bucketname+key_name to find the input file; the queuename is for the manger to know where to put the result
                     .build());
+            System.out.println("message sent to manager: " + msgBody);
 
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
@@ -494,7 +499,7 @@ public class LocalApplication {
             int n = Integer.parseInt(argv[2]);
             boolean terminate = argv.length > 3;
 
-            String ami = "ami-0b2ce1f6d9961367f";
+            String ami = "ami-01cc34ab2709337aa";
             String name = "EC2ManagerInstance";
             Region region = Region.US_EAST_1;
 
@@ -503,7 +508,6 @@ public class LocalApplication {
             Ec2Client ec2 = Ec2Client.builder()
                     .region(region)
                     .build();
-
 
             if(!findRunningManagerEC2Instances(ec2))
             {
