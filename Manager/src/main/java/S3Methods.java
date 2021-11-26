@@ -1,3 +1,4 @@
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.regions.Region;
@@ -5,13 +6,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.waiters.S3Waiter;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 
 public class S3Methods {
-    private static S3Methods S3Methods_instance = null;
-    private S3Client s3Client;
+    private final S3Client s3Client;
 
     private S3Methods() {
         Region region = Region.US_EAST_1;
@@ -20,11 +18,12 @@ public class S3Methods {
                 .build();
     }
 
-    public static S3Methods getInstance()
-    {
-        if (S3Methods_instance == null)
-            S3Methods_instance = new S3Methods();
-        return S3Methods_instance;
+    private static class Holder { // thread-safe singleton
+        private static final S3Methods INSTANCE = new S3Methods();
+    }
+
+    public static S3Methods getInstance() {
+        return S3Methods.Holder.INSTANCE;
     }
 
     // checks if the bucketName already been created
@@ -78,5 +77,62 @@ public class S3Methods {
             System.exit(1);
         }
         return "";
+    }
+
+    public void deleteBucket(String bucket) {
+
+        try {
+            // To delete a bucket, all the objects in the bucket must be deleted first
+            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucket).build();
+            ListObjectsV2Response listObjectsV2Response;
+
+            do {
+                listObjectsV2Response = s3Client.listObjectsV2(listObjectsV2Request);
+                for (S3Object s3Object : listObjectsV2Response.contents()) {
+                    s3Client.deleteObject(DeleteObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(s3Object.key())
+                            .build());
+                }
+
+                listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucket)
+                        .continuationToken(listObjectsV2Response.nextContinuationToken())
+                        .build();
+
+            } while(listObjectsV2Response.isTruncated());
+
+            DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
+            s3Client.deleteBucket(deleteBucketRequest);
+
+        } catch (S3Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+    }
+
+    public File getObjectBytes (String bucketName, String keyName, String outputFile ) {
+
+        try {
+            GetObjectRequest objectRequest = GetObjectRequest
+                    .builder()
+                    .key(keyName)
+                    .bucket(bucketName)
+                    .build();
+
+            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(objectRequest);
+            byte[] data = objectBytes.asByteArray();
+
+            // Write the data to a local file
+            File myFile = new File(outputFile);
+            OutputStream os = new FileOutputStream(myFile);
+            os.write(data);
+            System.out.println("Successfully obtained bytes from an S3 object");
+            os.close();
+            return myFile;
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        } catch (S3Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+        return null;
     }
 }

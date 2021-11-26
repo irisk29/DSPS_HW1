@@ -1,18 +1,8 @@
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.iam.model.CreateRoleRequest;
-import software.amazon.awssdk.services.iam.model.CreateRoleResponse;
-import software.amazon.awssdk.services.iam.model.IamException;
-import software.amazon.awssdk.services.iam.IamClient;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.*;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,32 +17,6 @@ public class Main {
     public static boolean gotTerminationMsg(Message message)
     {
         return message.body().equals("Terminate");
-    }
-
-    public static String createQueue(SqsClient sqsClient, String queueNameToCreate)
-    {
-        try {
-            String queueName = queueNameToCreate + System.currentTimeMillis() + ".fifo"; //msg only sent once
-            Map<String, String> attributes = new HashMap<String, String>();
-            attributes.put("FifoQueue", "true");
-            attributes.put("ContentBasedDeduplication", "true");
-            CreateQueueRequest createQueueRequest = CreateQueueRequest.builder()
-                    .queueName(queueName)
-                    .attributesWithStrings(attributes)
-                    .build();
-
-            sqsClient.createQueue(createQueueRequest);
-
-            GetQueueUrlResponse getQueueUrlResponse =
-                    sqsClient.getQueueUrl(GetQueueUrlRequest.builder().queueName(queueName).build());
-            String queueUrl = getQueueUrlResponse.queueUrl();
-            System.out.println(queueNameToCreate + " queue url: " + queueUrl);
-            return queueUrl;
-        }catch (Exception exception)
-        {
-            System.out.println(exception.getMessage());
-        }
-        return "";
     }
 
     public static int getFileSize(File file)
@@ -73,25 +37,10 @@ public class Main {
         return fileSize;
     }
 
-    public static void SendMessage(SqsClient sqsClient, String queueUrl , String msgBody)
-    {
-        try {
-            sqsClient.sendMessage(SendMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .messageGroupId("finishedtask")
-                    .messageBody(msgBody)
-                    .build());
-
-        } catch (SqsException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        }
-    }
-
     /*message from worker will be in the format - <original_pdf_url, the S3 url of the new
     image file, operation that was performed, finalMsgQueueName>
     where finalMsgQueueName represents the queue name between local application and the manager*/
-    public static void processFinishedTasks(S3Client s3, SqsClient sqsClient, String finishedTasksQueueURL)
+    public static void processFinishedTasks(String finishedTasksQueueURL)
     {
         System.out.println("In start of processFinishedTasks");
         S3Methods s3Methods = S3Methods.getInstance();
@@ -140,7 +89,7 @@ public class Main {
                     s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
 
                     String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
-                    SendMessage(sqsClient, finalMsgQueueName, doneMsg);
+                    sqsMethods.SendMessage(finalMsgQueueName, doneMsg);
                     System.out.println("send done msg: " + doneMsg + " to queue: " + finalMsgQueueName);
                 }
                 sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
@@ -154,31 +103,21 @@ public class Main {
 
     public static void main(String[] argv) {
         System.out.println("Hello From Manager");
-        Region region = Region.US_EAST_1;
 
         SQSMethods sqsMethods = SQSMethods.getInstance();
-
-        Ec2Client ec2 = Ec2Client.builder()
-                .region(region)
-                .build();
-        S3Client s3 = S3Client.builder()
-                .region(region)
-                .build();
-        SqsClient sqsClient = SqsClient.builder()
-                .region(region)
-                .build();
+        EC2Methods ec2Methods = EC2Methods.getInstance();
 
         final String queueNamePrefix = "lamqueue";
         String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);
         System.out.println("Local-Manager queue found!");
 
-        String tasksQueueURL = createQueue(sqsClient, "tasksqueue");
-        String finishedTasksQueueURL = createQueue(sqsClient, "finishedtasksqueue");
+        String tasksQueueURL = sqsMethods.createQueue("tasksqueue");
+        String finishedTasksQueueURL = sqsMethods.createQueue("finishedtasksqueue");
 
         System.out.println("is terminated: " + gotTerminate);
 
         new Thread(() -> {
-            processFinishedTasks(s3, sqsClient, finishedTasksQueueURL);
+            processFinishedTasks(finishedTasksQueueURL);
         }, "ManagerWorkerGetDoneTasks").start();
 
         //to allow async processing of requests from different local applications
@@ -193,12 +132,7 @@ public class Main {
                 break;
             }
 
-            ChangeMessageVisibilityRequest req = ChangeMessageVisibilityRequest.builder()
-                    .queueUrl(queueUrl)
-                    .receiptHandle(msgToProcess.receiptHandle())
-                    .visibilityTimeout(60) //1 min
-                    .build();
-            sqsClient.changeMessageVisibility(req);
+           sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 60); // 1 min
 
             System.out.println("got new local app message to process");
 
@@ -207,13 +141,18 @@ public class Main {
             String finalMsgQueueName = msg[2];
             System.out.println("finalMsgQueueName: " + finalMsgQueueName + "filesize: " + fileSize);
             map.putIfAbsent(finalMsgQueueName, fileSize);
-            Task task = new Task(ec2, sqsClient, s3, tasksQueueURL, msgToProcess, queueUrl);
+            Task task = new Task(tasksQueueURL, msgToProcess, queueUrl);
             pool.execute(task);
         }
 
         //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
-        //TODO: 1. clean resources 2. kill workers 3. kill himself 4. terminate pool
+        // 1. terminate pool 2. clean resources 3. kill workers 4. kill himself
+        pool.shutdownNow();
+        sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
+        sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
+        sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
 
-
+        ec2Methods.terminateWorkers();
+        ec2Methods.terminateManager();
     }
 }
