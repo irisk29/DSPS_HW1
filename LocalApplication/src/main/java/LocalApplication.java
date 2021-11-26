@@ -499,7 +499,10 @@ public class LocalApplication {
             String[] msgLine;
             String operation, inputFileLink, data = "";
             while(scanner.hasNext()) {
-                msgLine = scanner.next().split("\\$");
+                String line = scanner.next();
+                if(!line.contains("$"))
+                    break;
+                msgLine = line.split("\\$");
                 operation = msgLine[0];
                 inputFileLink = msgLine[1];
                 // successful operation - need to download the output file
