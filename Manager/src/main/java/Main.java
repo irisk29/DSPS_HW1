@@ -118,7 +118,7 @@ public class Main {
                 String keyName = msgBody[2];
                 String operation = msgBody[3];
                 finalMsgQueueName = msgBody[4];
-                result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation + "§";
+                result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "§";
             }
 
             System.out.println("result: " + result + " finalMsgQueueName: " + finalMsgQueueName);
