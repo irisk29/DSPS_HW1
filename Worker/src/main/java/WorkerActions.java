@@ -9,14 +9,15 @@ import org.fit.pdfdom.PDFDomTree;
 
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 public class WorkerActions {
-    private static Result<String> convertPDFToImage(URL url)
+    private static Result<String> convertPDFToImage(HttpURLConnection url)
     {
-        try (InputStream is = url.openStream(); PDDocument document = PDDocument.load(is)) {
+        try (InputStream is = url.getInputStream(); PDDocument document = PDDocument.load(is)) {
             PDFRenderer pdfRenderer = new PDFRenderer(document);
             BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 300, ImageType.RGB);
             String fileName = "outputFile" + System.currentTimeMillis() + ".png";
@@ -30,8 +31,8 @@ public class WorkerActions {
         }
     }
 
-    private static Result<String> convertPDFToTextFile(URL url){
-        try (InputStream is = url.openStream(); PDDocument doc = PDDocument.load(is)) {
+    private static Result<String> convertPDFToTextFile(HttpURLConnection url){
+        try (InputStream is = url.getInputStream(); PDDocument doc = PDDocument.load(is)) {
             String text = new PDFTextStripper().getText(doc);
             String fileName = "outputFile" + System.currentTimeMillis() + ".txt";
             File file = new File(fileName);
@@ -43,8 +44,8 @@ public class WorkerActions {
         }
     }
 
-    private static Result<String> convertPDFToHTML(URL url) {
-        try (InputStream is = url.openStream(); PDDocument document = PDDocument.load(is)) {
+    private static Result<String> convertPDFToHTML(HttpURLConnection url) {
+        try (InputStream is = url.getInputStream(); PDDocument document = PDDocument.load(is)) {
             String fileName = "outputFile" + System.currentTimeMillis() + ".html";
             File outputFile = new File(fileName);
             Writer output = new PrintWriter(outputFile.getName(), StandardCharsets.UTF_8);
@@ -60,18 +61,19 @@ public class WorkerActions {
     // runs the relevant task according to action
     // returns the result file path
     public static Result<String> doWorkerAction(String action, String pdfStringUrl) throws MalformedURLException {
-        URL pdfUrl = new URL(pdfStringUrl);
         Result<String> resultFilePath = null;
-        switch (action) {
-            case "ToImage":
-                resultFilePath = convertPDFToImage(pdfUrl);
-                break;
-            case "ToHTML":
-                resultFilePath = convertPDFToHTML(pdfUrl);
-                break;
-            case "ToText":
-                resultFilePath = convertPDFToTextFile(pdfUrl);
-                break;
+        try {
+            URL pdfUrl = new URL(pdfStringUrl);
+            HttpURLConnection huc = (HttpURLConnection) pdfUrl.openConnection();
+            huc.setConnectTimeout(15 * 1000); //15 seconds until we get the timeout from the url
+            switch (action) {
+                case "ToImage" -> resultFilePath = convertPDFToImage(huc);
+                case "ToHTML" -> resultFilePath = convertPDFToHTML(huc);
+                case "ToText" -> resultFilePath = convertPDFToTextFile(huc);
+            }
+            return resultFilePath;
+        } catch (IOException e) {
+            e.printStackTrace();
         }
         return resultFilePath;
     }

@@ -58,7 +58,6 @@ public class S3Methods {
             System.out.println(bucketName +" is ready");
         } catch (S3Exception e) {
             System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
         }
     }
 
@@ -97,7 +96,6 @@ public class S3Methods {
                     RequestBody.fromBytes(getObjectFile(objectPath)));
         } catch (S3Exception e) {
             System.err.println(e.getMessage());
-            System.exit(1);
         }
     }
 }

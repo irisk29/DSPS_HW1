@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 import software.amazon.awssdk.services.iam.IamClient;
 import org.apache.commons.codec.binary.Base64;
+import javafx.util.Pair;
 
 
 import java.io.*;
@@ -347,7 +348,7 @@ public class LocalApplication {
     }
 
     //this queue will contain the finished msg per local application
-    public static String CreateFinishQueue(SqsClient sqsClient)
+    public static Pair<String,String> CreateFinishQueue(SqsClient sqsClient)
     {
         try {
             String queueName = "malqueue" + ProcessHandle.current().pid() + System.currentTimeMillis() + ".fifo"; //msg only sent once
@@ -365,13 +366,13 @@ public class LocalApplication {
                     sqsClient.getQueueUrl(GetQueueUrlRequest.builder().queueName(queueName).build());
             String queueUrl = getQueueUrlResponse.queueUrl();
             System.out.println("queue url: " + queueUrl);
-            return queueUrl;
+            return new Pair<>(queueUrl, queueName);
 
         }catch (Exception exception)
         {
             System.out.println(exception.getMessage());
         }
-        return "";
+        return null;
     }
 
     public static void SendMessage(SqsClient sqsClient, String queueUrl , String msgBody)
@@ -405,16 +406,13 @@ public class LocalApplication {
         return null;
     }
 
-    public static void deleteMessages(SqsClient sqsClient, String queueUrl,  List<Message> messages) {
+    public static void deleteMessage(SqsClient sqsClient, String queueUrl,  Message message) {
         try {
-            for (Message message : messages) {
-                DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
+            DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
                         .queueUrl(queueUrl)
                         .receiptHandle(message.receiptHandle())
                         .build();
-                sqsClient.deleteMessage(deleteMessageRequest);
-            }
-
+            sqsClient.deleteMessage(deleteMessageRequest);
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
             System.exit(1);
@@ -428,8 +426,9 @@ public class LocalApplication {
             List<Message> messages = receiveMessages(sqsClient, queueUrl);
             if(!messages.isEmpty()) //got the final msg
             {
-                deleteMessages(sqsClient,queueUrl,messages);
-                return messages.get(0); //should be only one
+                Message msg = messages.get(0);
+                deleteMessage(sqsClient,queueUrl,msg);
+                return msg; //should be only one
             }
         }
     }
@@ -528,14 +527,16 @@ public class LocalApplication {
                     .build();
 
             String tasksQueueUrl = GetOrCreateTasksQueue(sqsClient);
-            String finishQueueUrl = CreateFinishQueue(sqsClient);
-            String queueName = "malqueue" + ProcessHandle.current().pid() + System.currentTimeMillis(); //which queue the manager needs to put the final msg
-            String msgBody = bucketName + "$" + key_name + "$" + queueName + "$" + n + "$" + inputFileSize; //n - number of msg per worker
+            Pair<String,String> finishQueuePair = CreateFinishQueue(sqsClient); //which queue the manager needs to put the final msg
+            String finishQueueUrl = finishQueuePair.getKey();
+            String finishQueueName = finishQueuePair.getValue();
+            String msgBody = bucketName + "$" + key_name + "$" + finishQueueName + "$" + n + "$" + inputFileSize; //n - number of msg per worker
             SendMessage(sqsClient,tasksQueueUrl,msgBody);
 
             Message finalMsg = getFinalMsg(sqsClient, finishQueueUrl);
+            System.out.println("got final msg");
             createOutputFile(s3, finalMsg, outFileName);
-
+            createOutputFile(s3, finalMsg, outFileName);
             if(terminate)
             {
                 SendMessage(sqsClient, tasksQueueUrl, "Terminate");

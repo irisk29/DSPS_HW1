@@ -49,7 +49,6 @@ public class SQSMethods {
                     .build());
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
         }
     }
 
@@ -78,7 +77,6 @@ public class SQSMethods {
             sqsClient.deleteMessage(deleteMessageRequest);
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
         }
     }
 }

@@ -17,6 +17,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 public class Task implements Runnable{
     Message task;
@@ -25,53 +26,8 @@ public class Task implements Runnable{
     S3Client s3;
     String tasksQueueURL;
     String lamQueueURL;
-    static int counter = 0;
-    static int batchCounter = 0;
-    public static final String POLICY_DOCUMENT =
-            """
-                      {
-                                  "Version": "2012-10-17",
-                                  "Statement": [
-                                      {
-                                          "Effect": "Allow",
-                                          "Action": [
-                                              "s3:*",
-                                              "s3-object-lambda:*",
-                              				"sqs:*",
-                              				"ec2:*",
-                              				"elasticloadbalancing:*",
-                              				"cloudwatch:*",
-                              				"autoscaling:*"
-                                          ],
-                                          "Resource": "*"
-                                      },
-                              		{
-                                          "Effect": "Allow",
-                                          "Action": "iam:CreateServiceLinkedRole",
-                                          "Resource": "*",
-                                          "Condition": {
-                                              "StringEquals": {
-                                                  "iam:AWSServiceName": [
-                                                      "autoscaling.amazonaws.com",
-                                                      "ec2scheduled.amazonaws.com",
-                                                      "elasticloadbalancing.amazonaws.com",
-                                                      "spot.amazonaws.com",
-                                                      "spotfleet.amazonaws.com",
-                                                      "transitgateway.amazonaws.com"
-                                                  ]
-                                              }
-                                          }
-                                      },
-                              		{
-                              		  "Effect": "Allow",
-                              		  "Principal": {
-                              			"Service": "ec2.amazonaws.com"
-                              		  },
-                              		  "Action": "sts:AssumeRole"
-                              		}
-                                  ]
-                              }
-                    """;
+    static long counter = 0;
+    static long batchCounter = 0;
 
     public Task(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, String tasksQueueURL, Message task, String lamQueueURL)
     {
@@ -83,24 +39,9 @@ public class Task implements Runnable{
         this.lamQueueURL = lamQueueURL;
     }
 
-    public static String createIAMRole(IamClient iam, String rolename) {
-        try {
-            CreateRoleRequest request = CreateRoleRequest.builder()
-                    .roleName(rolename)
-                    .assumeRolePolicyDocument(POLICY_DOCUMENT)
-                    .description("Created using the AWS SDK for Java")
-                    .build();
-
-            CreateRoleResponse response = iam.createRole(request);
-            System.out.println("The ARN of the role is "+response.role().arn());
-            return response.role().arn();
-        } catch (IamException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "";
+    public static String generateString() {
+        String uuid = UUID.randomUUID().toString();
+        return uuid;
     }
 
     public static void createTasksAndWorkers(Ec2Client ec2 , SqsClient sqsClient, S3Client s3, Message taskMsg,
@@ -137,16 +78,12 @@ public class Task implements Runnable{
     }
 
     public static void createAndStartEC2WorkerInstance(Ec2Client ec2,String name, String amiId, int maxCount) {
-        IamClient iam = IamClient.builder()
-                .region(Region.AWS_GLOBAL)
-                .build();
-        String arn = createIAMRole(iam, "WorkerRole");
+
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(maxCount)
                 .minCount(1)
-                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
                 /*.userData("#!/bin/sh\n" +
                         "sudo yum install java-1.8.0-openjdk\n" +
                         "aws s3 cp s3://bucket/folder/manager.jar .\n" +
@@ -156,30 +93,30 @@ public class Task implements Runnable{
         RunInstancesResponse response = ec2.runInstances(runRequest);
         List<Instance> instances = response.instances();
 
-        Tag tag = Tag.builder()
-                .key("W") //for worker
-                .value(name)
-                .build();
+//        Tag tag = Tag.builder()
+//                .key("W") //for worker
+//                .value(name)
+//                .build();
 
         for(Instance instance: instances)
         {
-            String instanceId = instance.instanceId();
-            CreateTagsRequest tagRequest = CreateTagsRequest.builder()
-                    .resources(instanceId)
-                    .tags(tag)
-                    .build();
-            try {
-                ec2.createTags(tagRequest);
-                System.out.printf(
-                        "Successfully started EC2 Worker Instance %s based on AMI %s\n",
-                        instanceId, amiId);
+//            String instanceId = instance.instanceId();
+//            CreateTagsRequest tagRequest = CreateTagsRequest.builder()
+//                    .resources(instanceId)
+//                    .tags(tag)
+//                    .build();
+//            try {
+//                ec2.createTags(tagRequest);
+//                System.out.printf(
+//                        "Successfully started EC2 Worker Instance %s based on AMI %s\n",
+//                        instanceId, amiId);
+//
+//            } catch (Ec2Exception e) {
+//                System.err.println(e.awsErrorDetails().errorMessage());
+//                System.exit(1);
+//            }
 
-            } catch (Ec2Exception e) {
-                System.err.println(e.awsErrorDetails().errorMessage());
-                System.exit(1);
-            }
-
-            startInstance(ec2, instanceId);
+            startInstance(ec2, instance.instanceId());
         }
     }
 
@@ -290,8 +227,10 @@ public class Task implements Runnable{
             int id = 0;
             for(String msgBody : msgsBody)
             {
-                messages.add(SendMessageBatchRequestEntry.builder().id("id" + id + "-" + batchCounter).messageBody(msgBody)
-                        .messageGroupId("finishedtask" + id + batchCounter).messageDeduplicationId("finishedtaskdup" + id + batchCounter).build());
+                String msgId = generateString();
+                String mi = id + "-" + msgId + "-" + batchCounter;
+                messages.add(SendMessageBatchRequestEntry.builder().id(msgId).messageBody(msgBody)
+                        .messageGroupId("finishedtask-" + mi).messageDeduplicationId("finishedtaskdup-" + mi).build());
                 id++;
             }
             batchCounter++;
@@ -299,7 +238,8 @@ public class Task implements Runnable{
                     .queueUrl(queueUrl)
                     .entries(messages)
                     .build();
-            System.out.println("Messages has been sent successfully as a batch " + batchCounter);
+            var res = sqsClient.sendMessageBatch(sendMessageBatchRequest);
+            System.out.println("suc msg in batch: " + (batchCounter-1) + " are: " + res.successful().size());
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
         }

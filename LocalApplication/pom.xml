@@ -48,5 +48,12 @@
             <artifactId>commons-codec</artifactId>
             <version>1.6</version>
         </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>11</version>
+        </dependency>
+        <!-- Thanks for using https://jar-download.com -->
+
     </dependencies>
 </project>

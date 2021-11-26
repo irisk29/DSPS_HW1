@@ -9,6 +9,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.*;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +62,8 @@ public class Main {
             try (BufferedReader br = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = br.readLine()) != null) {
-                    fileSize++;
+                    if(line.contains("§")) //every finished task will end with this symbol
+                        fileSize++;
                 }
             }
         }catch (Exception e)
@@ -97,11 +99,10 @@ public class Main {
 
         while(!gotTerminate)
         {
-            System.out.println("Waiting for finished tasks");
             Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL); //reads only 1 msg
             System.out.println("got finished task");
             String[] msgBody = finishedTask.body().split("\\$");
-
+            System.out.println("msg body is: " + Arrays.toString(msgBody));
             String result = "", finalMsgQueueName = "";
             if(msgBody[0].equals("taskfailed")) {
                 // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
@@ -109,7 +110,7 @@ public class Main {
                 String pdfStringUrl = msgBody[2];
                 finalMsgQueueName = msgBody[3];
                 String exceptionDesc = msgBody[4];
-                result = action + "$" + pdfStringUrl + "$" + exceptionDesc;
+                result = action + "$" + pdfStringUrl + "$" + exceptionDesc + "§";
             }
             else {
                 String original_pdf_url = msgBody[0];
@@ -117,7 +118,7 @@ public class Main {
                 String keyName = msgBody[2];
                 String operation = msgBody[3];
                 finalMsgQueueName = msgBody[4];
-                result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation;
+                result = original_pdf_url + "$" + bucketName + "$" + keyName + "$" + operation + "§";
             }
 
             System.out.println("result: " + result + " finalMsgQueueName: " + finalMsgQueueName);
@@ -139,8 +140,8 @@ public class Main {
                     s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
 
                     String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
-                    SendMessage(sqsClient, finishedTasksQueueURL, doneMsg);
-                    System.out.println("send done msg: " + doneMsg + " to queue: " + finishedTasksQueueURL);
+                    SendMessage(sqsClient, finalMsgQueueName, doneMsg);
+                    System.out.println("send done msg: " + doneMsg + " to queue: " + finalMsgQueueName);
                 }
                 sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
                 System.out.println("delete msg: " + finishedTask + " from queue: " + finishedTasksQueueURL);
@@ -195,7 +196,7 @@ public class Main {
             ChangeMessageVisibilityRequest req = ChangeMessageVisibilityRequest.builder()
                     .queueUrl(queueUrl)
                     .receiptHandle(msgToProcess.receiptHandle())
-                    .visibilityTimeout(300)
+                    .visibilityTimeout(60) //1 min
                     .build();
             sqsClient.changeMessageVisibility(req);
 
