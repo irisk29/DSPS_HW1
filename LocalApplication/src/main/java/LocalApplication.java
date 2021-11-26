@@ -21,11 +21,16 @@ import javafx.util.Pair;
 
 
 import java.io.*;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 
 public class LocalApplication {
 //    public static final String POLICY_DOCUMENT =
@@ -461,14 +466,61 @@ public class LocalApplication {
         return null;
     }
 
+    public static URL getURL(S3Client s3, String bucketName, String keyName) {
+        try {
+            GetUrlRequest request = GetUrlRequest.builder()
+                    .bucket(bucketName)
+                    .key(keyName)
+                    .build();
+
+            URL url = s3.utilities().getUrl(request);
+            return url;
+        } catch (S3Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+            return null;
+        }
+    }
+
     public static void createOutputFile(S3Client s3, Message finalMsg, String outputFileName)
     {
-        String msgBody = finalMsg.body();
-        String[] msg = msgBody.split("\\$");
-        String bucketName = msg[0];
-        String keyName = msg[1];
-        File file = getObjectBytes(s3, bucketName, keyName, outputFileName);
-        //TODO: create a HTML file
+        try {
+            String msgBody = finalMsg.body();
+            String[] msg = msgBody.split("\\$");
+            String bucketName = msg[0];
+            String keyName = msg[1];
+
+            File summeryFile = getObjectBytes(s3, bucketName, keyName, "summeryFile");
+            Scanner scanner = new Scanner(summeryFile);
+            scanner.useDelimiter("§");
+
+            File outputFile = new File(outputFileName + ".html");
+            PrintWriter writer = new PrintWriter(outputFile);
+            writer.write("<html><head><title>Final Output</title></head><body><p>");
+            String[] msgLine;
+            String operation, inputFileLink, data = "";
+            while(scanner.hasNext()) {
+                msgLine = scanner.next().split("\\$");
+                operation = msgLine[0];
+                inputFileLink = msgLine[1];
+                // successful operation - need to download the output file
+                if(msgLine.length > 3) {
+                    bucketName = msgLine[2];
+                    keyName = msgLine[3];
+                    String outputFileLink = getURL(s3, bucketName, keyName).getPath();
+                    data = operation + ": <a href=\"" + inputFileLink + "\">Input File</a> <a href=\"" + outputFileLink + "\">Output File</a><br>";
+                }
+                // unsuccessful operation - need to attach the error message
+                else {
+                    String errorDesc = msgLine[2];
+                    data = operation + ": <a href=\"" + inputFileLink + "\">Input File</a> " + errorDesc + "<br>";
+                }
+                writer.write(data);
+            }
+            writer.write("</p></body></html>");
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public static int getFileSize(String fileName)
@@ -536,12 +588,11 @@ public class LocalApplication {
             Message finalMsg = getFinalMsg(sqsClient, finishQueueUrl);
             System.out.println("got final msg");
             createOutputFile(s3, finalMsg, outFileName);
-            createOutputFile(s3, finalMsg, outFileName);
             if(terminate)
             {
                 SendMessage(sqsClient, tasksQueueUrl, "Terminate");
             }
-        }catch (Exception exception)
+        } catch (Exception exception)
         {
             System.out.println(exception.getMessage());
         }
