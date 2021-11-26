@@ -6,17 +6,18 @@ import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Main {
 
-    static boolean gotTerminate = false;
+    static AtomicBoolean gotTerminate = new AtomicBoolean(false);
     final static int MAX_T = 5;
     static ConcurrentHashMap<String, Integer> map
             = new ConcurrentHashMap<>();
 
     public static boolean gotTerminationMsg(Message message)
     {
-        return message.body().equals("Terminate");
+        return message == null || message.body().equals("Terminate");
     }
 
     public static int getFileSize(File file)
@@ -46,9 +47,11 @@ public class Main {
         S3Methods s3Methods = S3Methods.getInstance();
         SQSMethods sqsMethods = SQSMethods.getInstance();
 
-        while(!gotTerminate)
+        while(!gotTerminate.get())
         {
-            Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL); //reads only 1 msg
+            Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL, gotTerminate); //reads only 1 msg
+            if(finishedTask == null)
+                break;
             System.out.println("got finished task");
             String[] msgBody = finishedTask.body().split("\\$");
             System.out.println("msg body is: " + Arrays.toString(msgBody));
@@ -116,19 +119,19 @@ public class Main {
 
         System.out.println("is terminated: " + gotTerminate);
 
-        new Thread(() -> {
+        Thread buildFinalFileThread = new Thread(() -> {
             processFinishedTasks(finishedTasksQueueURL);
-        }, "ManagerWorkerGetDoneTasks").start();
+        }, "ManagerWorkerGetDoneTasks");
+        buildFinalFileThread.start();
 
         //to allow async processing of requests from different local applications
         ExecutorService pool = Executors.newFixedThreadPool(MAX_T);
         while(true)
         {
-            Message msgToProcess = sqsMethods.receiveMessage(queueUrl);
+            Message msgToProcess = sqsMethods.receiveMessage(queueUrl, gotTerminate);
             if(gotTerminationMsg(msgToProcess))
             {
                 System.out.println("found termination msg - need to finish");
-                gotTerminate = true;
                 break;
             }
 
@@ -147,12 +150,21 @@ public class Main {
 
         //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
         // 1. terminate pool 2. clean resources 3. kill workers 4. kill himself
+        int totalWorkers = ec2Methods.findWorkersByState("running").size();
         pool.shutdownNow();
         sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
-        sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
         sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
 
-        ec2Methods.terminateWorkers();
+        ec2Methods.terminateWorkers(totalWorkers);
+        gotTerminate.set(true);
+        try {
+            System.out.println("Waiting for the final thread to finish the output files.");
+            buildFinalFileThread.join();
+            System.out.println("The thread is done with the output files.");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
         ec2Methods.terminateManager();
     }
 }

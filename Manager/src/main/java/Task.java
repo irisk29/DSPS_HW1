@@ -44,7 +44,7 @@ public class Task implements Runnable{
     public static void createWorkersPerTasks(int numOfNeededWorkers)
     {
         EC2Methods ec2Client = EC2Methods.getInstance();
-        int numOfCurrWorkers = ec2Client.findRunningWorkersEC2Instances().size();
+        int numOfCurrWorkers = ec2Client.findWorkersByState("running").size();
         int numOfWorkersToCreate = Math.min(numOfNeededWorkers , 20 - 1 - 1) - numOfCurrWorkers;
         //20 - 1 - 1: max allowed is 19 and 1 for manager
         if(numOfWorkersToCreate <= 0) {

@@ -1,5 +1,8 @@
 import Result.*;
+import software.amazon.awssdk.regions.internal.util.EC2MetadataUtils;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException;
+
 import java.sql.Timestamp;
 
 public class Main {
@@ -50,7 +53,13 @@ public class Main {
                 System.out.println("deleted msg from queue: " + tasksQueueUrl);
             }
 
-        } catch (Exception e) {
+        } catch (QueueDoesNotExistException exception)
+        {
+            String instanceId = EC2MetadataUtils.getInstanceId();
+            EC2Methods ec2Methods = EC2Methods.getInstance();
+            ec2Methods.stopInstance(instanceId);
+        }
+        catch (Exception e) {
             System.out.println(e.getMessage());
         }
 

@@ -69,14 +69,10 @@ public class SQSMethods {
     }
 
     public void deleteMessage(String queueUrl, Message message) {
-        try {
-            DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .receiptHandle(message.receiptHandle())
-                    .build();
-            sqsClient.deleteMessage(deleteMessageRequest);
-        } catch (SqsException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-        }
+        DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
+                .queueUrl(queueUrl)
+                .receiptHandle(message.receiptHandle())
+                .build();
+        sqsClient.deleteMessage(deleteMessageRequest);
     }
 }

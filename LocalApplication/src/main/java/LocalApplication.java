@@ -179,14 +179,17 @@ public class LocalApplication {
         System.out.printf("Successfully started instance %s\n", instanceId);
     }
 
-    public static void stopInstance(Ec2Client ec2, String instanceId) {
-
-        StopInstancesRequest request = StopInstancesRequest.builder()
-                .instanceIds(instanceId)
+    // checks if the bucketName already been created
+    public static boolean isBucketExist(S3Client s3Client, String bucketName) {
+        HeadBucketRequest headBucketRequest = HeadBucketRequest.builder()
+                .bucket(bucketName)
                 .build();
-
-        ec2.stopInstances(request);
-        System.out.printf("Successfully stopped instance %s\n", instanceId);
+        try {
+            s3Client.headBucket(headBucketRequest);
+            return true;
+        } catch (NoSuchBucketException e) {
+            return false;
+        }
     }
 
     public static void createBucket( S3Client s3Client, String bucketName) {
@@ -493,7 +496,7 @@ public class LocalApplication {
             Scanner scanner = new Scanner(summeryFile);
             scanner.useDelimiter("§");
 
-            File outputFile = new File(outputFileName + ".html");
+            File outputFile = new File(outputFileName + System.currentTimeMillis() + ".html");
             PrintWriter writer = new PrintWriter(outputFile);
             writer.write("<html><head><title>Final Output</title></head><body><p>");
             String[] msgLine;
@@ -544,6 +547,54 @@ public class LocalApplication {
         return fileSize;
     }
 
+    public static void deleteSQSQueue(String queueUrl) {
+
+        try {
+            SqsClient sqsClient = SqsClient.builder()
+                    .region(Region.US_EAST_1)
+                    .build();
+
+            DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
+                    .queueUrl(queueUrl)
+                    .build();
+
+            sqsClient.deleteQueue(deleteQueueRequest);
+        } catch (SqsException e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+    }
+
+    public static void deleteBucket(String bucket) {
+
+        try {
+            S3Client s3Client = S3Client.builder()
+                    .region(Region.US_EAST_1)
+                    .build();
+            // To delete a bucket, all the objects in the bucket must be deleted first
+            ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucket).build();
+            ListObjectsV2Response listObjectsV2Response;
+
+            do {
+                listObjectsV2Response = s3Client.listObjectsV2(listObjectsV2Request);
+                for (S3Object s3Object : listObjectsV2Response.contents()) {
+                    s3Client.deleteObject(DeleteObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(s3Object.key())
+                            .build());
+                }
+
+                listObjectsV2Request = ListObjectsV2Request.builder().bucket(bucket)
+                        .continuationToken(listObjectsV2Response.nextContinuationToken())
+                        .build();
+
+            } while(listObjectsV2Response.isTruncated());
+
+            DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
+            s3Client.deleteBucket(deleteBucketRequest);
+
+        } catch (S3Exception ignored) {}
+    }
+
     public static void main(String[] argv){
         try {
             if (argv.length < 3)
@@ -572,8 +623,9 @@ public class LocalApplication {
             S3Client s3 = S3Client.builder()
                 .region(region)
                 .build();
-            String bucketName = "localapplicationirissagiv" + System.currentTimeMillis();
-            createBucket(s3, bucketName);
+            String bucketName = "localapplicationirissagiv";
+            if(!isBucketExist(s3,bucketName))
+                createBucket(s3, bucketName);
             String key_name = "InputFile" + ProcessHandle.current().pid() + new Timestamp(System.currentTimeMillis());
             putS3Object(s3, bucketName, key_name, inputFileName);
 
@@ -583,6 +635,7 @@ public class LocalApplication {
 
             String tasksQueueUrl = GetOrCreateTasksQueue(sqsClient);
             Pair<String,String> finishQueuePair = CreateFinishQueue(sqsClient); //which queue the manager needs to put the final msg
+            assert finishQueuePair != null;
             String finishQueueUrl = finishQueuePair.getKey();
             String finishQueueName = finishQueuePair.getValue();
             String msgBody = bucketName + "$" + key_name + "$" + finishQueueName + "$" + n + "$" + inputFileSize; //n - number of msg per worker
@@ -595,6 +648,8 @@ public class LocalApplication {
             {
                 SendMessage(sqsClient, tasksQueueUrl, "Terminate");
             }
+            deleteSQSQueue(finishQueueUrl);
+            deleteBucket(bucketName);
         } catch (Exception exception)
         {
             System.out.println(exception.getMessage());

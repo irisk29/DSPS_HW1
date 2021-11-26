@@ -24,7 +24,7 @@ public class EC2Methods {
         return Holder.INSTANCE;
     }
 
-    public List<String> findRunningWorkersEC2Instances() {
+    public List<String> findWorkersByState(String state) {
         List<String> workersInstanceId = new LinkedList<>();
         try {
             String nextToken = null;
@@ -32,7 +32,7 @@ public class EC2Methods {
             do {
                 Filter filter = Filter.builder()
                         .name("instance-state-name")
-                        .values("running")
+                        .values(state)
                         .build();
 
                 DescribeInstancesRequest request = DescribeInstancesRequest.builder()
@@ -56,7 +56,7 @@ public class EC2Methods {
                         {
                             if(tag.key().equals("W")) //found worker
                             {
-                                System.out.println("Found worker instance!");
+                                System.out.println("Found worker instance! the state is: " + instance.state().name());
                                 workersInstanceId.add(instance.instanceId());
                             }
                         }
@@ -72,18 +72,28 @@ public class EC2Methods {
         return workersInstanceId;
     }
 
-    public void terminateWorkers() {
+    public void terminateWorkers(int totalWorkers) {
         try{
-            List<String> workersInstanceId = findRunningWorkersEC2Instances();
-            TerminateInstancesRequest ti = TerminateInstancesRequest.builder()
-                    .instanceIds(workersInstanceId)
-                    .build();
+            System.out.println("total workers: " + totalWorkers);
+            while(totalWorkers != 0)
+            {
+                List<String> workersInstanceId = findWorkersByState("stopped");
+                if(workersInstanceId.isEmpty())
+                    continue;
+                System.out.println("Found workers to terminate: " + workersInstanceId);
+                TerminateInstancesRequest ti = TerminateInstancesRequest.builder()
+                        .instanceIds(workersInstanceId)
+                        .build();
 
-            TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
-            List<InstanceStateChange> list = response.terminatingInstances();
+                TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
+                List<InstanceStateChange> list = response.terminatingInstances();
+                System.out.println("Terminated " + list.size() + " workers");
+                totalWorkers -= list.size();
+                System.out.println("total workers after sub is: " + totalWorkers);
 
-            for (InstanceStateChange sc : list) {
-                System.out.println("The ID of the terminated worker instance is " + sc.instanceId());
+                for (InstanceStateChange sc : list) {
+                    System.out.println("The ID of the terminated worker instance is " + sc.instanceId());
+                }
             }
         } catch (Ec2Exception e) {
             System.err.println(e.awsErrorDetails());

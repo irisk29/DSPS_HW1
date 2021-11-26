@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SQSMethods {
 
@@ -42,7 +43,7 @@ public class SQSMethods {
 
     // waits until there is message to get from queueUrl
     // if there is more then one, returns the first
-    public Message receiveMessage(String queueUrl) {
+    public Message receiveMessage(String queueUrl, AtomicBoolean gotTerminated) {
         List<Message> messages;
         do
         {
@@ -51,9 +52,9 @@ public class SQSMethods {
                     .maxNumberOfMessages(1)
                     .build();
             messages = sqsClient.receiveMessage(receiveMessageRequest).messages();
-        } while (messages.isEmpty());
+        } while (messages.isEmpty() && !gotTerminated.get());
         // return only the first message each call
-        return messages.get(0);
+        return messages.isEmpty() ? null : messages.get(0);
     }
 
     public void deleteMessage(String queueUrl,  Message message) {
