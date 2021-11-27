@@ -412,7 +412,7 @@ public class LocalApplication {
             String bucketName = msg[0];
             String keyName = msg[1];
 
-            File summeryFile = getObjectBytes(s3, bucketName, keyName, "summeryFile");
+            File summeryFile = getObjectBytes(s3, bucketName, keyName, "summeryFile"+ System.currentTimeMillis());
             Scanner scanner = new Scanner(summeryFile);
             scanner.useDelimiter("@");
 
