@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Main {
 
     static AtomicBoolean gotTerminate = new AtomicBoolean(false);
-    final static int MAX_T = 5;
+    final static int MAX_T = 10;
     static ConcurrentHashMap<String, Integer> map
             = new ConcurrentHashMap<>();
 
@@ -27,7 +27,7 @@ public class Main {
             try (BufferedReader br = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = br.readLine()) != null) {
-                    if(line.contains("§")) //every finished task will end with this symbol
+                    if(line.contains("@")) //every finished task will end with this symbol
                         fileSize++;
                 }
             }
@@ -62,7 +62,7 @@ public class Main {
                 String pdfStringUrl = msgBody[2];
                 finalMsgQueueName = msgBody[3];
                 String exceptionDesc = msgBody[4];
-                result = action + "$" + pdfStringUrl + "$" + exceptionDesc + "§";
+                result = action + "$" + pdfStringUrl + "$" + exceptionDesc + "@";
             }
             else {
                 String original_pdf_url = msgBody[0];
@@ -70,7 +70,7 @@ public class Main {
                 String keyName = msgBody[2];
                 String operation = msgBody[3];
                 finalMsgQueueName = msgBody[4];
-                result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "§";
+                result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "@";
             }
 
             System.out.println("result: " + result + " finalMsgQueueName: " + finalMsgQueueName);
@@ -135,7 +135,7 @@ public class Main {
                 break;
             }
 
-           sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 60); // 1 min
+           sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 30 * 60); // 30 min
 
             System.out.println("got new local app message to process");
 

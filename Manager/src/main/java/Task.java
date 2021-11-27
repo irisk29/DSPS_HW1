@@ -21,11 +21,11 @@ public class Task implements Runnable{
         this.lamQueueURL = lamQueueURL;
     }
 
-    public static String generateString() {
+    public String generateString() {
         return UUID.randomUUID().toString();
     }
 
-    public static void createTasksAndWorkers(Message taskMsg, String tasksQueueURL)
+    public void createTasksAndWorkers(Message taskMsg, String tasksQueueURL)
     {
         String task = taskMsg.body();
         String[] taskBody = task.split("\\$");
@@ -36,12 +36,12 @@ public class Task implements Runnable{
         System.out.println(bucketName + " " + key_name + " " + finalMsgQueueName + " " + numMsgPerWorker);
 
         int fileSize = sendTaskMessages(bucketName, key_name, tasksQueueURL, finalMsgQueueName);
-        int numOfNeededWorkers = fileSize / Integer.parseInt(numMsgPerWorker);
+        int numOfNeededWorkers = (int) Math.ceil(fileSize / Double.parseDouble(numMsgPerWorker));
 
         createWorkersPerTasks(numOfNeededWorkers);
     }
 
-    public static void createWorkersPerTasks(int numOfNeededWorkers)
+    public void createWorkersPerTasks(int numOfNeededWorkers)
     {
         EC2Methods ec2Client = EC2Methods.getInstance();
         int numOfCurrWorkers = ec2Client.findWorkersByState("running").size();
@@ -52,13 +52,12 @@ public class Task implements Runnable{
             return; //no need to create
         }
         System.out.println("need to create " + numOfWorkersToCreate + " more workers!");
-
         String ami = "ami-01cc34ab2709337aa";
         String name = "EC2WorkerInstance";
         ec2Client.createAndStartEC2WorkerInstance(name, ami, numOfWorkersToCreate);
     }
 
-    public static void sendBatchMessages(String queueUrl, List<String> msgsBody) {
+    public void sendBatchMessages(String queueUrl, List<String> msgsBody) {
         try {
             SQSMethods sqsMethods = SQSMethods.getInstance();
             Collection<SendMessageBatchRequestEntry> messages = new ArrayList<>();
@@ -79,7 +78,7 @@ public class Task implements Runnable{
     }
 
 
-    public static int sendTaskMessages(String bucketName, String key_name, String queueUrl, String finalMsgQueueName)
+    public int sendTaskMessages(String bucketName, String key_name, String queueUrl, String finalMsgQueueName)
     {
         S3Methods s3Methods = S3Methods.getInstance();
 

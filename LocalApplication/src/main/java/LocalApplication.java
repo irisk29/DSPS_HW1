@@ -5,17 +5,12 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.ec2.model.StartInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.StopInstancesRequest;
 import software.amazon.awssdk.services.ec2.model.Tag;
-import software.amazon.awssdk.services.iam.model.CreateRoleRequest;
-import software.amazon.awssdk.services.iam.model.CreateRoleResponse;
-import software.amazon.awssdk.services.iam.model.IamException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.waiters.S3Waiter;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
-import software.amazon.awssdk.services.iam.IamClient;
 import org.apache.commons.codec.binary.Base64;
 import javafx.util.Pair;
 
@@ -23,150 +18,76 @@ import javafx.util.Pair;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.sql.Timestamp;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class LocalApplication {
-//    public static final String POLICY_DOCUMENT =
-//            """
-//                      {
-//                                  "Version": "2012-10-17",
-//                                  "Statement": [
-//                                      {
-//                                          "Effect": "Allow",
-//                                          "Action": [
-//                                              "s3:*",
-//                                              "s3-object-lambda:*",
-//                              				"sqs:*",
-//                              				"ec2:*",
-//                              				"elasticloadbalancing:*",
-//                              				"cloudwatch:*",
-//                              				"autoscaling:*"
-//                                          ],
-//                                          "Resource": "*"
-//                                      },
-//                              		{
-//                                          "Effect": "Allow",
-//                                          "Action": "iam:CreateServiceLinkedRole",
-//                                          "Resource": "*",
-//                                          "Condition": {
-//                                              "StringEquals": {
-//                                                  "iam:AWSServiceName": [
-//                                                      "autoscaling.amazonaws.com",
-//                                                      "ec2scheduled.amazonaws.com",
-//                                                      "elasticloadbalancing.amazonaws.com",
-//                                                      "spot.amazonaws.com",
-//                                                      "spotfleet.amazonaws.com",
-//                                                      "transitgateway.amazonaws.com"
-//                                                  ]
-//                                              }
-//                                          }
-//                                      },
-//                              		{
-//                              		  "Effect": "Allow",
-//                              		  "Principal": {
-//                              			"Service": "ec2.amazonaws.com"
-//                              		  },
-//                              		  "Action": "sts:AssumeRole"
-//                              		}
-//                                  ]
-//                              }
-//                    """;
-//
-//    public static String createIAMRole(IamClient iam, String rolename) {
-//        try {
-//            CreateRoleRequest request = CreateRoleRequest.builder()
-//                    .roleName(rolename)
-//                    .assumeRolePolicyDocument(POLICY_DOCUMENT)
-//                    .description("Created using the AWS SDK for Java")
-//                    .build();
-//
-//            CreateRoleResponse response = iam.createRole(request);
-//            System.out.println("The ARN of the role is "+response.role().arn());
-//            return response.role().arn();
-//        } catch (IamException e) {
-//            System.err.println(e.awsErrorDetails().errorMessage());
-//            System.exit(1);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-//        return "";
-//    }
+    final public static String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
+    final public static String SECURITY_ID = "sg-03e1043c7ed636b1a";
+    final public static String KEY_NAME = "dsps";
 
-//    public static void createEC2KeyPair(Ec2Client ec2, String keyName) {
-//
-//        try {
-//            CreateKeyPairRequest request = CreateKeyPairRequest.builder()
-//                    .keyName(keyName).build();
-//
-//            ec2.createKeyPair(request);
-//            System.out.printf(
-//                    "Successfully created key pair named %s",
-//                    keyName);
-//
-//        } catch (Ec2Exception e) {
-//            System.err.println(e.awsErrorDetails().errorMessage());
-//            System.exit(1);
-//        }
-//    }
+    public static void createEC2KeyPair(Ec2Client ec2, String keyName) {
+
+        try {
+            CreateKeyPairRequest request = CreateKeyPairRequest.builder()
+                    .keyName(keyName).build();
+
+            ec2.createKeyPair(request);
+            System.out.printf(
+                    "Successfully created key pair named %s",
+                    keyName);
+
+        } catch (Ec2Exception ignored) {}
+    }
 
     public static String createEC2ManagerInstance(Ec2Client ec2,String name, String amiId ) {
 
-//        IamClient iam = IamClient.builder()
-//                .region(Region.AWS_GLOBAL)
-//                .build();
-//
-//        String arn = createIAMRole(iam, "ManagerRole");
-//        String key_name = "dspsHw";
-//        createEC2KeyPair(ec2, key_name);
+        createEC2KeyPair(ec2, KEY_NAME);
         String userData = """
                 #!/bin/sh
-                sudo rm Manager.jar
-                aws s3 cp s3://managerjarbucket/Manager.jar .
-                java -jar ./Manager.jar""";
+                rpm --import https://yum.corretto.aws/corretto.key
+                curl -L -o /etc/yum.repos.d/corretto.repo https://yum.corretto.aws/corretto.repo
+                yum install -y java-15-amazon-corretto-devel
+                aws s3 cp s3://workermanagerjarsbucket/Manager.jar .
+                cd /
+                java -jar Manager.jar""";
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
-                .instanceType(InstanceType.T2_MICRO)
+                .instanceType(InstanceType.T2_MEDIUM)
                 .maxCount(1)
                 .minCount(1)
-//                .keyName(key_name)
-//                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(arn).build())
-//                .userData(Base64.encodeBase64String(userData.getBytes(StandardCharsets.UTF_8)))
+                .securityGroupIds(SECURITY_ID)
+                .keyName(KEY_NAME)
+                .iamInstanceProfile(IamInstanceProfileSpecification.builder().arn(IAM_ROLE).build())
+                .userData(Base64.encodeBase64String(userData.getBytes(StandardCharsets.UTF_8)))
                 .build();
 
         RunInstancesResponse response = ec2.runInstances(runRequest);
         String instanceId = response.instances().get(0).instanceId();
 
-//        Tag tag = Tag.builder()
-//                .key("M") //for manager
-//                .value(name)
-//                .build();
-//
-//        CreateTagsRequest tagRequest = CreateTagsRequest.builder()
-//                .resources(instanceId)
-//                .tags(tag)
-//                .build();
-//
-//        try {
-//            ec2.createTags(tagRequest);
-//            System.out.printf(
-//                    "Successfully started EC2 Instance %s based on AMI %s\n",
-//                    instanceId, amiId);
+        Tag tag = Tag.builder()
+                .key("M") //for manager
+                .value(name)
+                .build();
+
+        CreateTagsRequest tagRequest = CreateTagsRequest.builder()
+                .resources(instanceId)
+                .tags(tag)
+                .build();
+
+        try {
+            ec2.createTags(tagRequest);
+            System.out.printf(
+                    "Successfully started EC2 Instance %s based on AMI %s\n",
+                    instanceId, amiId);
 
             return instanceId;
-//
-//        } catch (Ec2Exception e) {
-//            System.err.println(e.awsErrorDetails().errorMessage());
-//            System.exit(1);
-//        }
-//
-//        return "";
+
+        } catch (Ec2Exception e) {
+            System.err.println(e.awsErrorDetails().errorMessage());
+        }
+
+        return "";
     }
 
     public static void startInstance(Ec2Client ec2, String instanceId) {
@@ -476,8 +397,7 @@ public class LocalApplication {
                     .key(keyName)
                     .build();
 
-            URL url = s3.utilities().getUrl(request);
-            return url;
+            return s3.utilities().getUrl(request);
         } catch (S3Exception e) {
             System.err.println(e.awsErrorDetails().errorMessage());
             return null;
@@ -494,7 +414,7 @@ public class LocalApplication {
 
             File summeryFile = getObjectBytes(s3, bucketName, keyName, "summeryFile");
             Scanner scanner = new Scanner(summeryFile);
-            scanner.useDelimiter("§");
+            scanner.useDelimiter("@");
 
             File outputFile = new File(outputFileName + System.currentTimeMillis() + ".html");
             PrintWriter writer = new PrintWriter(outputFile);
@@ -512,7 +432,7 @@ public class LocalApplication {
                 if(msgLine.length > 3) {
                     bucketName = msgLine[2];
                     keyName = msgLine[3];
-                    String outputFileLink = getURL(s3, bucketName, keyName).getPath();
+                    String outputFileLink = Objects.requireNonNull(getURL(s3, bucketName, keyName)).getPath();
                     data = operation + ": <a href=\"" + inputFileLink + "\">Input File</a> <a href=\"" + outputFileLink + "\">Output File</a><br>";
                 }
                 // unsuccessful operation - need to attach the error message
