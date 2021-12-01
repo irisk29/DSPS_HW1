@@ -1,15 +1,21 @@
 import org.apache.commons.codec.binary.Base64;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
+import java.io.FileReader;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public class EC2Methods {
     private final Ec2Client ec2Client;
-    final private String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
-    final private String SECURITY_ID = "sg-03e1043c7ed636b1a";
-    final private String KEY_NAME = "dsps";
+    private String IAM_ROLE;
+    private String SECURITY_ID;
+    private String KEY_NAME;
+    private String AMI;
 
     private EC2Methods()
     {
@@ -17,6 +23,7 @@ public class EC2Methods {
         this.ec2Client = Ec2Client.builder()
                 .region(region)
                 .build();
+        readInformationFromJson();
     }
 
     private static class Holder { // thread-safe singleton
@@ -25,6 +32,22 @@ public class EC2Methods {
 
     public static EC2Methods getInstance() {
         return Holder.INSTANCE;
+    }
+
+    public void readInformationFromJson()
+    {
+        JSONParser parser = new JSONParser();
+        try {
+            JSONObject jsonObj = (JSONObject) parser.parse(new FileReader("secure_info.json"));
+            AMI = jsonObj.get("ami").toString();
+            IAM_ROLE = jsonObj.get("arn").toString();
+            KEY_NAME = jsonObj.get("keyName").toString();
+            SECURITY_ID = jsonObj.get("securityGroupId").toString();
+
+        } catch (IOException | ParseException e) {
+            e.printStackTrace();
+        }
+
     }
 
     private void createEC2KeyPair(String keyName) {
@@ -49,7 +72,7 @@ public class EC2Methods {
         System.out.printf("Successfully started EC2 Instance %s\n", instanceId);
     }
 
-    public String createEC2Instance(String tagKey, String tagValue, String amiId, InstanceType instanceType) {
+    public String createEC2Instance(String tagKey, String tagValue, InstanceType instanceType) {
         try {
             createEC2KeyPair(KEY_NAME);
 
@@ -60,9 +83,9 @@ public class EC2Methods {
                     yum install -y java-15-amazon-corretto-devel
                     aws s3 cp s3://workermanagerjarsbucket/Manager.jar .
                     cd /
-                    java -jar Manager.jar""";
+                    java -jar Manager.jar""" + " " + AMI + " " + KEY_NAME + " " + IAM_ROLE + " " + SECURITY_ID;
             RunInstancesRequest runRequest = RunInstancesRequest.builder()
-                    .imageId(amiId)
+                    .imageId(AMI)
                     .instanceType(instanceType)
                     .maxCount(1)
                     .minCount(1)

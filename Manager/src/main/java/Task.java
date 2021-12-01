@@ -50,9 +50,8 @@ public class Task implements Runnable{
         if(numOfWorkersToCreate <= 0) {
             return; //no need to create
         }
-        String ami = "ami-01cc34ab2709337aa";
         String name = "EC2WorkerInstance";
-        ec2Client.createAndStartEC2WorkerInstance(name, ami, numOfWorkersToCreate);
+        ec2Client.createAndStartEC2WorkerInstance(name, numOfWorkersToCreate);
     }
 
     public void sendBatchMessages(String queueUrl, List<String> msgsBody) {

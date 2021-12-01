@@ -53,7 +53,10 @@
             <artifactId>javafx-base</artifactId>
             <version>11</version>
         </dependency>
-        <!-- Thanks for using https://jar-download.com -->
-
+        <dependency>
+            <groupId>com.googlecode.json-simple</groupId>
+            <artifactId>json-simple</artifactId>
+            <version>1.1.1</version>
+        </dependency>
     </dependencies>
 </project>

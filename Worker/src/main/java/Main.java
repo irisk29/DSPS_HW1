@@ -2,7 +2,6 @@ import Result.*;
 import software.amazon.awssdk.regions.internal.util.EC2MetadataUtils;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException;
-import org.apache.log4j.Logger;
 import java.sql.Timestamp;
 
 public class Main {

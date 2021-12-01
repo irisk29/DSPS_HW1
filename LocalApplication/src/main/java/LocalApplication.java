@@ -84,9 +84,8 @@ public class LocalApplication {
             String managerTagKey = "M";
             if(!ec2Methods.isEC2InstanceRunning(managerTagKey))
             {
-                String ami = "ami-01cc34ab2709337aa";
                 String tagValue = "EC2ManagerInstance";
-                String instanceId = ec2Methods.createEC2Instance(managerTagKey, tagValue, ami, InstanceType.T2_MEDIUM);
+                String instanceId = ec2Methods.createEC2Instance(managerTagKey, tagValue, InstanceType.T2_MEDIUM);
                 ec2Methods.startInstance(instanceId);
             }
 

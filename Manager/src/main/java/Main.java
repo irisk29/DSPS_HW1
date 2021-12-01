@@ -102,6 +102,11 @@ public class Main {
         SQSMethods sqsMethods = SQSMethods.getInstance();
         EC2Methods ec2Methods = EC2Methods.getInstance();
 
+        EC2Methods.AMI = argv[0];
+        EC2Methods.KEY_NAME = argv[1];
+        EC2Methods.IAM_ROLE = argv[2];
+        EC2Methods.SECURITY_ID = argv[3];
+
         final String queueNamePrefix = "lamqueue";
         String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);
         String tasksQueueURL = sqsMethods.createQueue("tasksqueue");

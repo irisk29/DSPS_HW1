@@ -10,9 +10,10 @@ import java.util.List;
 
 public class EC2Methods {
     private final Ec2Client ec2Client;
-    final public static String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
-    final public static String SECURITY_ID = "sg-03e1043c7ed636b1a";
-    final public static String KEY_NAME = "dsps";
+    public static String IAM_ROLE;
+    public static String SECURITY_ID;
+    public static String KEY_NAME;
+    public static String AMI;
 
     private EC2Methods()
     {
@@ -28,17 +29,6 @@ public class EC2Methods {
 
     public static EC2Methods getInstance() {
         return Holder.INSTANCE;
-    }
-
-    public void createEC2KeyPair(String keyName) {
-
-        try {
-            CreateKeyPairRequest request = CreateKeyPairRequest.builder()
-                    .keyName(keyName).build();
-
-            ec2Client.createKeyPair(request);
-
-        } catch (Ec2Exception ignored) {}
     }
 
     public List<String> findWorkersByState(String state) {
@@ -186,9 +176,7 @@ public class EC2Methods {
         }
     }
 
-    public void createAndStartEC2WorkerInstance(String name, String amiId, int maxCount) {
-
-        createEC2KeyPair(KEY_NAME);
+    public void createAndStartEC2WorkerInstance(String name, int maxCount) {
         String userData = """
                 #!/bin/sh
                 rpm --import https://yum.corretto.aws/corretto.key
@@ -199,7 +187,7 @@ public class EC2Methods {
                 java -jar Worker.jar""";
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
-                .imageId(amiId)
+                .imageId(AMI)
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(maxCount)
                 .minCount(1)
