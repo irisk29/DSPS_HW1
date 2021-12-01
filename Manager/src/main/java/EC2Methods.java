@@ -7,15 +7,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import org.apache.log4j.Logger;
 
 public class EC2Methods {
     private final Ec2Client ec2Client;
     final public static String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
     final public static String SECURITY_ID = "sg-03e1043c7ed636b1a";
     final public static String KEY_NAME = "dsps";
-
-    public static Logger log = Logger.getLogger(EC2Methods.class.getName());
 
     private EC2Methods()
     {
@@ -40,9 +37,6 @@ public class EC2Methods {
                     .keyName(keyName).build();
 
             ec2Client.createKeyPair(request);
-            System.out.printf(
-                    "Successfully created key pair named %s",
-                    keyName);
 
         } catch (Ec2Exception ignored) {}
     }
@@ -66,24 +60,13 @@ public class EC2Methods {
 
                 for (Reservation reservation : response.reservations()) {
                     for (Instance instance : reservation.instances()) {
-                        System.out.printf(
-                                "Found Reservation with id %s, " +
-                                        "AMI %s, " +
-                                        "type %s, " +
-                                        "state %s \n",
-                                instance.instanceId(),
-                                instance.imageId(),
-                                instance.instanceType(),
-                                instance.state().name());
                         for(Tag tag : instance.tags())
                         {
                             if(tag.key().equals("W")) //found worker
                             {
-                                System.out.println("Found worker instance! the state is: " + instance.state().name());
                                 workersInstanceId.add(instance.instanceId());
                             }
                         }
-                        System.out.println("");
                     }
                 }
                 nextToken = response.nextToken();
@@ -114,25 +97,13 @@ public class EC2Methods {
 
                 for (Reservation reservation : response.reservations()) {
                     for (Instance instance : reservation.instances()) {
-                        System.out.printf(
-                                "Found Reservation with id %s, " +
-                                        "AMI %s, " +
-                                        "type %s, " +
-                                        "state %s \n",
-                                instance.instanceId(),
-                                instance.imageId(),
-                                instance.instanceType(),
-                                instance.state().name());
                         for(Tag tag : instance.tags())
                         {
                             if(tag.key().equals("W") && !workersToExclude.contains(instance.instanceId())) //found worker
                             {
-                                System.out.println("Found worker instance! the state is: " + instance.state().name());
                                 workersInstanceId.add(instance.instanceId());
-                                log.debug("Found worker instance! the state is: " + instance.state().name());
                             }
                         }
-                        System.out.println("");
                     }
                 }
                 nextToken = response.nextToken();
@@ -146,8 +117,6 @@ public class EC2Methods {
 
     public void terminateWorkers(int totalWorkers) {
         try{
-            System.out.println("total workers: " + totalWorkers);
-            log.debug("total workers: " + totalWorkers);
             List<String> workersToExclude = new ArrayList<>();
             while(totalWorkers != 0)
             {
@@ -155,24 +124,13 @@ public class EC2Methods {
                 workersToExclude.addAll(workersInstanceId);
                 if(workersInstanceId.isEmpty())
                     continue;
-                System.out.println("Found workers to terminate: " + workersInstanceId);
-                log.debug("Found workers to terminate: " + workersInstanceId);
                 TerminateInstancesRequest ti = TerminateInstancesRequest.builder()
                         .instanceIds(workersInstanceId)
                         .build();
 
                 TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
                 List<InstanceStateChange> list = response.terminatingInstances();
-                System.out.println("Terminated " + list.size() + " workers");
-                log.debug("Terminated " + list.size() + " workers");
                 totalWorkers -= list.size();
-                System.out.println("total workers after sub is: " + totalWorkers);
-                log.debug("total workers after sub is: " + totalWorkers);
-
-                for (InstanceStateChange sc : list) {
-                    System.out.println("The ID of the terminated worker instance is " + sc.instanceId());
-                    log.debug("The ID of the terminated worker instance is " + sc.instanceId());
-                }
             }
         } catch (Ec2Exception e) {
             System.err.println(e.awsErrorDetails());
@@ -197,24 +155,13 @@ public class EC2Methods {
 
                 for (Reservation reservation : response.reservations()) {
                     for (Instance instance : reservation.instances()) {
-                        System.out.printf(
-                                "Found Reservation with id %s, " +
-                                        "AMI %s, " +
-                                        "type %s, " +
-                                        "state %s \n",
-                                instance.instanceId(),
-                                instance.imageId(),
-                                instance.instanceType(),
-                                instance.state().name());
                         for(Tag tag : instance.tags())
                         {
                             if(tag.key().equals("M")) //found manager
                             {
-                                System.out.println("Found manager instance!");
                                 return instance.instanceId();
                             }
                         }
-                        System.out.println("");
                     }
                 }
                 nextToken = response.nextToken();
@@ -233,11 +180,7 @@ public class EC2Methods {
                     .instanceIds(managerInstanceId)
                     .build();
 
-            TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
-            InstanceStateChange managerDown = response.terminatingInstances().get(0);
-
-            System.out.println("The ID of the terminated manager instance is " + managerDown.instanceId());
-            log.debug("The ID of the terminated manager instance is " + managerDown.instanceId());
+            ec2Client.terminateInstances(ti);
         } catch (Ec2Exception e) {
             System.err.println(e.awsErrorDetails());
         }
@@ -283,9 +226,6 @@ public class EC2Methods {
                     .build();
             try {
                 ec2Client.createTags(tagRequest);
-                System.out.printf(
-                        "Successfully started EC2 Worker Instance %s based on AMI %s\n",
-                        instanceId, amiId);
             } catch (Ec2Exception e) {
                 System.err.println(e.awsErrorDetails().errorMessage());
             }
@@ -301,6 +241,5 @@ public class EC2Methods {
                 .build();
 
         ec2Client.startInstances(request);
-        System.out.printf("Successfully started instance %s\n", instanceId);
     }
 }

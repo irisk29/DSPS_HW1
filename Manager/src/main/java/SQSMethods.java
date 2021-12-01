@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SQSMethods {
 
-    private SqsClient sqsClient;
+    private final SqsClient sqsClient;
 
     private SQSMethods() {
         Region region = Region.US_EAST_1;
@@ -99,7 +99,6 @@ public class SQSMethods {
             GetQueueUrlResponse getQueueUrlResponse =
                     sqsClient.getQueueUrl(GetQueueUrlRequest.builder().queueName(queueName).build());
             String queueUrl = getQueueUrlResponse.queueUrl();
-            System.out.println(queueNameToCreate + " queue url: " + queueUrl);
             return queueUrl;
         }catch (Exception exception)
         {

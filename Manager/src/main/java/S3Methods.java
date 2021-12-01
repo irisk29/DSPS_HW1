@@ -54,7 +54,6 @@ public class S3Methods {
             // Wait until the bucket is created and print out the response.
             WaiterResponse<HeadBucketResponse> waiterResponse = s3Waiter.waitUntilBucketExists(bucketRequestWait);
             waiterResponse.matched().response().ifPresent(System.out::println);
-            System.out.println(bucketName +" is ready");
         } catch (S3Exception e) {
             System.err.println(e.awsErrorDetails().errorMessage());
         }
@@ -123,7 +122,6 @@ public class S3Methods {
             File myFile = new File(outputFile);
             OutputStream os = new FileOutputStream(myFile);
             os.write(data);
-            System.out.println("Successfully obtained bytes from an S3 object");
             os.close();
             return myFile;
         } catch (IOException ex) {

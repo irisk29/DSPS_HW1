@@ -34,7 +34,6 @@ public class Task implements Runnable{
         String key_name = taskBody[1];
         String finalMsgQueueName = taskBody[2];
         String numMsgPerWorker = taskBody[3];
-        System.out.println(bucketName + " " + key_name + " " + finalMsgQueueName + " " + numMsgPerWorker);
 
         int fileSize = sendTaskMessages(bucketName, key_name, tasksQueueURL, finalMsgQueueName);
         int numOfNeededWorkers = (int) Math.ceil(fileSize / Double.parseDouble(numMsgPerWorker));
@@ -49,10 +48,8 @@ public class Task implements Runnable{
         int numOfWorkersToCreate = Math.min(numOfNeededWorkers , 20 - 1 - 1) - numOfCurrWorkers;
         //20 - 1 - 1: max allowed is 19 and 1 for manager
         if(numOfWorkersToCreate <= 0) {
-            System.out.println("No need to create more workers!");
             return; //no need to create
         }
-        System.out.println("need to create " + numOfWorkersToCreate + " more workers!");
         String ami = "ami-01cc34ab2709337aa";
         String name = "EC2WorkerInstance";
         ec2Client.createAndStartEC2WorkerInstance(name, ami, numOfWorkersToCreate);
@@ -84,7 +81,6 @@ public class Task implements Runnable{
         S3Methods s3Methods = S3Methods.getInstance();
 
         File file = s3Methods.getObjectBytes(bucketName, key_name, "Task" + counter + ".txt");
-        System.out.println("create file in manager");
         counter.addAndGet(1);
         int fileSize = 0;
         List<String> messages = new ArrayList<>();
@@ -99,14 +95,12 @@ public class Task implements Runnable{
                     //finalMsgQueueName - to know to which local app we are doing the task for
                     String msgBody = line + "\t" + finalMsgQueueName;
                     messages.add(msgBody);
-                    //SendMessage(sqsClient, queueUrl, msgBody);
                     fileSize++;
                 }
             }
             if(!messages.isEmpty())
                 sendBatchMessages(queueUrl, messages);
 
-            System.out.println("file size is: " + fileSize);
             return fileSize;
         }catch (Exception exception)
         {

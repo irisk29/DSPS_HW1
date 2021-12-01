@@ -43,7 +43,6 @@ public class Main {
     where finalMsgQueueName represents the queue name between local application and the manager*/
     public static void processFinishedTasks(String finishedTasksQueueURL)
     {
-        System.out.println("In start of processFinishedTasks");
         S3Methods s3Methods = S3Methods.getInstance();
         SQSMethods sqsMethods = SQSMethods.getInstance();
 
@@ -52,9 +51,7 @@ public class Main {
             Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL, gotTerminate); //reads only 1 msg
             if(finishedTask == null)
                 break;
-            System.out.println("got finished task");
             String[] msgBody = finishedTask.body().split("\\$");
-            System.out.println("msg body is: " + Arrays.toString(msgBody));
             String result = "", finalMsgQueueName = "";
             if(msgBody[0].equals("taskfailed")) {
                 // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
@@ -73,8 +70,6 @@ public class Main {
                 result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "@";
             }
 
-            System.out.println("result: " + result + " finalMsgQueueName: " + finalMsgQueueName);
-
             int fileSize = map.get(finalMsgQueueName);
             try
             {
@@ -85,7 +80,6 @@ public class Main {
                 int currFileSize = getFileSize(f);
                 if(currFileSize == fileSize) //finished all the tasks for certain local application
                 {
-                    EC2Methods.log.debug("finished all the tasks for local app " + finalMsgQueueName);
                     String bucket_name = "finishedtasksbucket";
                     if(!s3Methods.isBucketExist(bucket_name))
                         s3Methods.createBucket(bucket_name);
@@ -95,11 +89,8 @@ public class Main {
                     String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
                     String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
                     sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
-                    System.out.println("send done msg: " + doneMsg + " to queue: " + finalMsgQueueUrl);
-                    EC2Methods.log.debug("send done msg: " + doneMsg + " to queue: " + finalMsgQueueUrl);
                 }
                 sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
-                System.out.println("delete msg: " + finishedTask + " from queue: " + finishedTasksQueueURL);
             } catch (Exception e)
             {
                 System.out.println(e.getMessage());
@@ -108,20 +99,13 @@ public class Main {
     }
 
     public static void main(String[] argv) {
-        System.out.println("Hello From Manager");
-
         SQSMethods sqsMethods = SQSMethods.getInstance();
         EC2Methods ec2Methods = EC2Methods.getInstance();
 
         final String queueNamePrefix = "lamqueue";
         String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);
-        System.out.println("Local-Manager queue found!");
-        EC2Methods.log.debug("Local-Manager queue found!");
-
         String tasksQueueURL = sqsMethods.createQueue("tasksqueue");
         String finishedTasksQueueURL = sqsMethods.createQueue("finishedtasksqueue");
-
-        System.out.println("is terminated: " + gotTerminate);
 
         Thread buildFinalFileThread = new Thread(() -> {
             processFinishedTasks(finishedTasksQueueURL);
@@ -135,20 +119,14 @@ public class Main {
             Message msgToProcess = sqsMethods.receiveMessage(queueUrl, gotTerminate);
             if(gotTerminationMsg(msgToProcess))
             {
-                System.out.println("found termination msg - need to finish");
-                EC2Methods.log.debug("found termination msg - need to finish");
                 break;
             }
 
            sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 30 * 60); // 30 min
 
-            System.out.println("got new local app message to process");
-            EC2Methods.log.debug("got new local app message to process");
-
             String[] msg = msgToProcess.body().split("\\$");
             int fileSize = Integer.parseInt(msg[msg.length - 1]);
             String finalMsgQueueName = msg[2];
-            System.out.println("finalMsgQueueName: " + finalMsgQueueName + "filesize: " + fileSize);
             map.putIfAbsent(finalMsgQueueName, fileSize);
             Task task = new Task(tasksQueueURL, msgToProcess, queueUrl);
             pool.execute(task);
@@ -161,23 +139,15 @@ public class Main {
         pool.shutdownNow();
         sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
         sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
-        EC2Methods.log.debug("deleted tasks queue");
-        EC2Methods.log.debug("deleted the queue that local apps put their tasks");
 
         ec2Methods.terminateWorkers(totalWorkers);
-        EC2Methods.log.debug("terminated workers");
         gotTerminate.set(true);
         try {
-            System.out.println("Waiting for the final thread to finish the output files.");
-            EC2Methods.log.debug("Waiting for the final thread to finish the output files.");
             buildFinalFileThread.join();
-            System.out.println("The thread is done with the output files.");
-            EC2Methods.log.debug("The thread is done with the output files.");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
         sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
-        EC2Methods.log.debug("deleted finished tasks queue");
         ec2Methods.terminateManager();
     }
 }

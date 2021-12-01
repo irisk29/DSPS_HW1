@@ -28,6 +28,5 @@ public class EC2Methods {
                 .build();
 
         ec2Client.stopInstances(request);
-        System.out.printf("Successfully stopped instance %s", instanceId);
     }
 }
