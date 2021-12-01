@@ -85,6 +85,7 @@ public class Main {
                 int currFileSize = getFileSize(f);
                 if(currFileSize == fileSize) //finished all the tasks for certain local application
                 {
+                    EC2Methods.log.debug("finished all the tasks for local app " + finalMsgQueueName);
                     String bucket_name = "finishedtasksbucket";
                     if(!s3Methods.isBucketExist(bucket_name))
                         s3Methods.createBucket(bucket_name);
@@ -92,8 +93,10 @@ public class Main {
                     s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
 
                     String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
-                    sqsMethods.SendMessage(finalMsgQueueName, doneMsg);
-                    System.out.println("send done msg: " + doneMsg + " to queue: " + finalMsgQueueName);
+                    String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
+                    sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
+                    System.out.println("send done msg: " + doneMsg + " to queue: " + finalMsgQueueUrl);
+                    EC2Methods.log.debug("send done msg: " + doneMsg + " to queue: " + finalMsgQueueUrl);
                 }
                 sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
                 System.out.println("delete msg: " + finishedTask + " from queue: " + finishedTasksQueueURL);
@@ -113,6 +116,7 @@ public class Main {
         final String queueNamePrefix = "lamqueue";
         String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);
         System.out.println("Local-Manager queue found!");
+        EC2Methods.log.debug("Local-Manager queue found!");
 
         String tasksQueueURL = sqsMethods.createQueue("tasksqueue");
         String finishedTasksQueueURL = sqsMethods.createQueue("finishedtasksqueue");
@@ -132,12 +136,14 @@ public class Main {
             if(gotTerminationMsg(msgToProcess))
             {
                 System.out.println("found termination msg - need to finish");
+                EC2Methods.log.debug("found termination msg - need to finish");
                 break;
             }
 
            sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 30 * 60); // 30 min
 
             System.out.println("got new local app message to process");
+            EC2Methods.log.debug("got new local app message to process");
 
             String[] msg = msgToProcess.body().split("\\$");
             int fileSize = Integer.parseInt(msg[msg.length - 1]);
@@ -151,20 +157,27 @@ public class Main {
         //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
         // 1. terminate pool 2. clean resources 3. kill workers 4. kill himself
         int totalWorkers = ec2Methods.findWorkersByState("running").size();
+        totalWorkers += ec2Methods.findWorkersByState("pending").size();
         pool.shutdownNow();
         sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
         sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
+        EC2Methods.log.debug("deleted tasks queue");
+        EC2Methods.log.debug("deleted the queue that local apps put their tasks");
 
         ec2Methods.terminateWorkers(totalWorkers);
+        EC2Methods.log.debug("terminated workers");
         gotTerminate.set(true);
         try {
             System.out.println("Waiting for the final thread to finish the output files.");
+            EC2Methods.log.debug("Waiting for the final thread to finish the output files.");
             buildFinalFileThread.join();
             System.out.println("The thread is done with the output files.");
+            EC2Methods.log.debug("The thread is done with the output files.");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
         sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
+        EC2Methods.log.debug("deleted finished tasks queue");
         ec2Methods.terminateManager();
     }
 }

@@ -11,7 +11,7 @@ import java.io.IOException;
 
 public class S3Methods {
     private static S3Methods S3Methods_instance = null;
-    private S3Client s3Client;
+    private final S3Client s3Client;
 
     private S3Methods() {
         Region region = Region.US_EAST_1;
@@ -91,6 +91,7 @@ public class S3Methods {
             PutObjectRequest putOb = PutObjectRequest.builder()
                     .bucket(bucketName)
                     .key(objectKey)
+                    .acl(ObjectCannedACL.PUBLIC_READ)
                     .build();
             PutObjectResponse response = this.s3Client.putObject(putOb,
                     RequestBody.fromBytes(getObjectFile(objectPath)));

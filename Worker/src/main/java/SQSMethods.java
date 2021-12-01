@@ -7,7 +7,7 @@ import java.util.NoSuchElementException;
 
 public class SQSMethods {
     private static SQSMethods SQSMethods_instance = null;
-    private SqsClient sqsClient;
+    private final SqsClient sqsClient;
 
     private SQSMethods() {
         Region region = Region.US_EAST_1;
@@ -36,6 +36,15 @@ public class SQSMethods {
         } while(urls.isEmpty());
         // returns the lam queue url
         return urls.get(0);
+    }
+
+    public String getQueueTasksUrl(String queueNamePrefix)
+    {
+        ListQueuesRequest filterListRequest = ListQueuesRequest.builder()
+                    .queueNamePrefix(queueNamePrefix).build();
+        ListQueuesResponse listQueuesFilteredResponse = this.sqsClient.listQueues(filterListRequest);
+        List<String> urls = listQueuesFilteredResponse.queueUrls();
+        return urls.isEmpty() ? null : urls.get(0);
     }
 
     // sends a msgBody to queueUrl
@@ -74,5 +83,15 @@ public class SQSMethods {
                 .receiptHandle(message.receiptHandle())
                 .build();
         sqsClient.deleteMessage(deleteMessageRequest);
+    }
+
+    public void changeMessageVisibility(String queueUrl, Message msg, int seconds)
+    {
+        ChangeMessageVisibilityRequest req = ChangeMessageVisibilityRequest.builder()
+                .queueUrl(queueUrl)
+                .receiptHandle(msg.receiptHandle())
+                .visibilityTimeout(seconds)
+                .build();
+        sqsClient.changeMessageVisibility(req);
     }
 }

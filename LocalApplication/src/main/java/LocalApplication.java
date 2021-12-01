@@ -1,3 +1,4 @@
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.model.InstanceType;
 import software.amazon.awssdk.services.sqs.model.*;
 import java.io.*;
@@ -50,7 +51,7 @@ public class LocalApplication {
                 if(msgLine.length > 3) {
                     bucketName = msgLine[2];
                     keyName = msgLine[3];
-                    String outputFileLink = Objects.requireNonNull(s3Methods.getS3ObjectURL(bucketName, keyName)).getPath();
+                    String outputFileLink = "https://" + bucketName + ".s3." + Region.US_EAST_1.toString().toLowerCase() + ".amazonaws.com/" + keyName;
                     data = operation + ": <a href=\"" + inputFileLink + "\">Input File</a> <a href=\"" + outputFileLink + "\">Output File</a><br>";
                 }
                 // unsuccessful operation - need to attach the error message
@@ -89,7 +90,7 @@ public class LocalApplication {
                 ec2Methods.startInstance(instanceId);
             }
 
-            String bucketName = "localapplicationsbucket-irissagiv";
+            String bucketName = "localapplicationsbucket";
             if(!s3Methods.isBucketExist(bucketName))
                 s3Methods.createBucket(bucketName);
             String key_name = "InputFile" + ProcessHandle.current().pid() + new Timestamp(System.currentTimeMillis());
@@ -109,11 +110,13 @@ public class LocalApplication {
 
             createOutputFile(s3Methods, finalMsg, outFileName);
 
-            if(terminate)
+            if(terminate) {
                 sqsMethods.sendMessage(tasksQueueUrl, "Terminate");
+                s3Methods.deleteBucket(bucketName);
+            }
 
             sqsMethods.deleteSQSQueue(finishQueueUrl);
-            s3Methods.deleteBucket(bucketName);
+
         } catch (Exception exception)
         {
             System.out.println(exception.getMessage());

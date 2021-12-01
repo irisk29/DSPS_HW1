@@ -7,8 +7,8 @@ import java.nio.charset.StandardCharsets;
 
 public class EC2Methods {
     private final Ec2Client ec2Client;
-    final private String IAM_ROLE = "arn:aws:iam::145327589717:instance-profile/LabInstanceProfile";
-    final private String SECURITY_ID = "sg-094e2c3380c267626";
+    final private String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
+    final private String SECURITY_ID = "sg-03e1043c7ed636b1a";
     final private String KEY_NAME = "dsps";
 
     private EC2Methods()

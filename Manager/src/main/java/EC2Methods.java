@@ -3,20 +3,19 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import org.apache.log4j.Logger;
 
 public class EC2Methods {
     private final Ec2Client ec2Client;
     final public static String IAM_ROLE = "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile";
     final public static String SECURITY_ID = "sg-03e1043c7ed636b1a";
     final public static String KEY_NAME = "dsps";
+
+    public static Logger log = Logger.getLogger(EC2Methods.class.getName());
 
     private EC2Methods()
     {
@@ -130,6 +129,7 @@ public class EC2Methods {
                             {
                                 System.out.println("Found worker instance! the state is: " + instance.state().name());
                                 workersInstanceId.add(instance.instanceId());
+                                log.debug("Found worker instance! the state is: " + instance.state().name());
                             }
                         }
                         System.out.println("");
@@ -147,6 +147,7 @@ public class EC2Methods {
     public void terminateWorkers(int totalWorkers) {
         try{
             System.out.println("total workers: " + totalWorkers);
+            log.debug("total workers: " + totalWorkers);
             List<String> workersToExclude = new ArrayList<>();
             while(totalWorkers != 0)
             {
@@ -155,6 +156,7 @@ public class EC2Methods {
                 if(workersInstanceId.isEmpty())
                     continue;
                 System.out.println("Found workers to terminate: " + workersInstanceId);
+                log.debug("Found workers to terminate: " + workersInstanceId);
                 TerminateInstancesRequest ti = TerminateInstancesRequest.builder()
                         .instanceIds(workersInstanceId)
                         .build();
@@ -162,11 +164,14 @@ public class EC2Methods {
                 TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
                 List<InstanceStateChange> list = response.terminatingInstances();
                 System.out.println("Terminated " + list.size() + " workers");
+                log.debug("Terminated " + list.size() + " workers");
                 totalWorkers -= list.size();
                 System.out.println("total workers after sub is: " + totalWorkers);
+                log.debug("total workers after sub is: " + totalWorkers);
 
                 for (InstanceStateChange sc : list) {
                     System.out.println("The ID of the terminated worker instance is " + sc.instanceId());
+                    log.debug("The ID of the terminated worker instance is " + sc.instanceId());
                 }
             }
         } catch (Ec2Exception e) {
@@ -231,7 +236,8 @@ public class EC2Methods {
             TerminateInstancesResponse response = ec2Client.terminateInstances(ti);
             InstanceStateChange managerDown = response.terminatingInstances().get(0);
 
-            System.out.println("The ID of the terminated worker instance is " + managerDown.instanceId());
+            System.out.println("The ID of the terminated manager instance is " + managerDown.instanceId());
+            log.debug("The ID of the terminated manager instance is " + managerDown.instanceId());
         } catch (Ec2Exception e) {
             System.err.println(e.awsErrorDetails());
         }

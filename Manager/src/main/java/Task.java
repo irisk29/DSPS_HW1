@@ -5,14 +5,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Task implements Runnable{
     Message task;
     String tasksQueueURL;
     String lamQueueURL;
 
-    static long counter = 0;
-    static long batchCounter = 0;
+    static AtomicLong counter = new AtomicLong(0);
+    static AtomicLong batchCounter = new AtomicLong(0);
 
     public Task(String tasksQueueURL, Message task, String lamQueueURL)
     {
@@ -70,7 +71,7 @@ public class Task implements Runnable{
                         .messageGroupId("finishedtask-" + mi).messageDeduplicationId("finishedtaskdup-" + mi).build());
                 id++;
             }
-            batchCounter++;
+            batchCounter.addAndGet(1);
             sqsMethods.sendBatchMessage(queueUrl, messages);
         } catch (SqsException e) {
             System.err.println(e.awsErrorDetails().errorMessage());
@@ -84,7 +85,7 @@ public class Task implements Runnable{
 
         File file = s3Methods.getObjectBytes(bucketName, key_name, "Task" + counter + ".txt");
         System.out.println("create file in manager");
-        counter++;
+        counter.addAndGet(1);
         int fileSize = 0;
         List<String> messages = new ArrayList<>();
         try {
