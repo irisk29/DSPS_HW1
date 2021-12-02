@@ -46,7 +46,7 @@ In this assignment you will code a real-world application to distributively proc
 
 ## Considerations
 ### Security
-Yes
+All our sensitive data and credentials saved on files in our local computer. When we created a new EC2 client we gave the permissions needed for him and therefore there was no need to pass the credentials. For the sensitive data, we transferred it in the User Data and did not write them in plain text.
 ### Scalability?
 Yes, on one hand, the Manager doesn't hold local app inforation on the ram, only the amount of "connected" local apps.
 - The personal data such as number of urls remaining and return bucket name are held in temp bucket, its name is the personal return SQS queue of the local app.
@@ -57,6 +57,7 @@ Yes, on one hand, the Manager doesn't hold local app inforation on the ram, only
 ### Persistence?
 - We're catching all possible exeptions that might rais from the operation of our code, we do not protect against sudden termination from Amazon itself.
 ### Threads in our application
-Only the Manager uses 2 thread:
-- thread `main`: responsible for receiving messages (up to 10 at a time) from local apps and sending tasks to the workers
-- thread `WorkerToManager`: responsible for receiving messages (up to 10 at a time) and upload their cotent to the proper S3 bucket of the relevant local app
+Only the Manager uses more then one thread:
+- `proccess wokers finished tasks thread`: responsible for receiving finished messages from workers and append them to the relevant summery file. once summery file is full of all operations, it sends it to the local application. 
+- `waiting for new local application task thread`: waits for new task. for each one it gets, start new thread from the thread poll and waits for new message.
+- `handle new local application task thread`: we manage thread poll for threads that can handle new task - send message for each URL in the file and create the number of needed workers.
