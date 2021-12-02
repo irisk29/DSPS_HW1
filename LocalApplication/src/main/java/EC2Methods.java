@@ -16,6 +16,7 @@ public class EC2Methods {
     private String SECURITY_ID;
     private String KEY_NAME;
     private String AMI;
+    private String JAR_BUCKET;
 
     private EC2Methods()
     {
@@ -43,6 +44,7 @@ public class EC2Methods {
             IAM_ROLE = jsonObj.get("arn").toString();
             KEY_NAME = jsonObj.get("keyName").toString();
             SECURITY_ID = jsonObj.get("securityGroupId").toString();
+            JAR_BUCKET = jsonObj.get("jarsBucketName").toString();
 
         } catch (IOException | ParseException e) {
             e.printStackTrace();
@@ -78,12 +80,11 @@ public class EC2Methods {
 
             String userData = """
                     #!/bin/sh
-                    rpm --import https://yum.corretto.aws/corretto.key
-                    curl -L -o /etc/yum.repos.d/corretto.repo https://yum.corretto.aws/corretto.repo
-                    yum install -y java-15-amazon-corretto-devel
-                    aws s3 cp s3://workermanagerjarsbucket/Manager.jar .
+                    yum install -y java-1.8.0-openjdk
+                    aws s3 cp s3://""" + JAR_BUCKET + "/Manager.jar ." +
+                    """
                     cd /
-                    java -jar Manager.jar""" + " " + AMI + " " + KEY_NAME + " " + IAM_ROLE + " " + SECURITY_ID;
+                    java -jar Manager.jar""" + " " + AMI + " " + KEY_NAME + " " + IAM_ROLE + " " + SECURITY_ID + " " + JAR_BUCKET;
             RunInstancesRequest runRequest = RunInstancesRequest.builder()
                     .imageId(AMI)
                     .instanceType(instanceType)

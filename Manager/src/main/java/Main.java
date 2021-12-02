@@ -106,6 +106,7 @@ public class Main {
         EC2Methods.KEY_NAME = argv[1];
         EC2Methods.IAM_ROLE = argv[2];
         EC2Methods.SECURITY_ID = argv[3];
+        EC2Methods.JAR_BUCKET = argv[4];
 
         final String queueNamePrefix = "lamqueue";
         String queueUrl = sqsMethods.getQueueUrl(queueNamePrefix);

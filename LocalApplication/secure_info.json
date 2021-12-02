@@ -2,5 +2,6 @@
 	"ami" : "ami-01cc34ab2709337aa",
 	"arn" : "arn:aws:iam::935282201937:instance-profile/LabInstanceProfile",
 	"keyName" : "dsps",
-	"securityGroupId" : "sg-03e1043c7ed636b1a"
+	"securityGroupId" : "sg-03e1043c7ed636b1a",
+	"jarsBucketName" : "workermanagerjarsbucket"
 }

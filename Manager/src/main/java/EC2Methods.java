@@ -14,6 +14,7 @@ public class EC2Methods {
     public static String SECURITY_ID;
     public static String KEY_NAME;
     public static String AMI;
+    public static String JAR_BUCKET;
 
     private EC2Methods()
     {
@@ -177,12 +178,12 @@ public class EC2Methods {
     }
 
     public void createAndStartEC2WorkerInstance(String name, int maxCount) {
-        String userData = """
+        String userData =
+                """
                 #!/bin/sh
-                rpm --import https://yum.corretto.aws/corretto.key
-                curl -L -o /etc/yum.repos.d/corretto.repo https://yum.corretto.aws/corretto.repo
-                yum install -y java-15-amazon-corretto-devel
-                aws s3 cp s3://workermanagerjarsbucket/Worker.jar .
+                yum install -y java-1.8.0-openjdk
+                aws s3 cp s3://""" + JAR_BUCKET + "/Worker.jar ." +
+                """
                 cd /
                 java -jar Worker.jar""";
 
