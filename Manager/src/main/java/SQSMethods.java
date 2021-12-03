@@ -3,11 +3,12 @@ import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SQSMethods {
 
@@ -43,7 +44,7 @@ public class SQSMethods {
 
     // waits until there is message to get from queueUrl
     // if there is more then one, returns the first
-    public Message receiveMessage(String queueUrl, AtomicBoolean gotTerminated) {
+    public Message receiveMessage(String queueUrl, AtomicBoolean gotTerminate) {
         List<Message> messages;
         do
         {
@@ -52,9 +53,35 @@ public class SQSMethods {
                     .maxNumberOfMessages(1)
                     .build();
             messages = sqsClient.receiveMessage(receiveMessageRequest).messages();
-        } while (messages.isEmpty() && !gotTerminated.get());
+            if(gotTerminate.get() && messages.isEmpty()) return null;
+
+        } while (messages.isEmpty());
         // return only the first message each call
-        return messages.isEmpty() ? null : messages.get(0);
+        return messages.get(0);
+    }
+
+    public boolean checkQueueIsEmpty(String queueUrl)
+    {
+
+        try {
+            // Specify the attributes to retrieve.
+            List<QueueAttributeName> atts = new ArrayList<>();
+            atts.add(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES);
+            atts.add(QueueAttributeName.APPROXIMATE_NUMBER_OF_MESSAGES_NOT_VISIBLE);
+
+            GetQueueAttributesRequest attributesRequest= GetQueueAttributesRequest.builder()
+                    .queueUrl(queueUrl)
+                    .attributeNames(atts)
+                    .build();
+
+            GetQueueAttributesResponse response = sqsClient.getQueueAttributes(attributesRequest);
+            return response.attributesAsStrings().get("ApproximateNumberOfMessages").equals("0")
+                    && response.attributesAsStrings().get("ApproximateNumberOfMessagesNotVisible").equals("0");
+        } catch (Exception e)
+        {
+            System.out.println(e.getMessage());
+        }
+        return false;
     }
 
     public void deleteMessage(String queueUrl,  Message message) {
@@ -98,8 +125,7 @@ public class SQSMethods {
 
             GetQueueUrlResponse getQueueUrlResponse =
                     sqsClient.getQueueUrl(GetQueueUrlRequest.builder().queueName(queueName).build());
-            String queueUrl = getQueueUrlResponse.queueUrl();
-            return queueUrl;
+            return getQueueUrlResponse.queueUrl();
         }catch (Exception exception)
         {
             System.out.println(exception.getMessage());

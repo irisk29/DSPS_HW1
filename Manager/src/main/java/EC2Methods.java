@@ -181,8 +181,11 @@ public class EC2Methods {
         String userData =
                 """
                 #!/bin/sh
-                yum install -y java-1.8.0-openjdk
-                aws s3 cp s3://""" + JAR_BUCKET + "/Worker.jar ." +
+                sudo rpm --import https://yum.corretto.aws/corretto.key
+                sudo curl -L -o /etc/yum.repos.d/corretto.repo https://yum.corretto.aws/corretto.repo
+                sudo yum install -y java-15-amazon-corretto-devel
+                """ +
+                "aws s3 cp s3://" + JAR_BUCKET + "/Worker.jar .\n" +
                 """
                 cd /
                 java -jar Worker.jar""";

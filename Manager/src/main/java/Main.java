@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Main {
 
@@ -43,58 +44,85 @@ public class Main {
     where finalMsgQueueName represents the queue name between local application and the manager*/
     public static void processFinishedTasks(String finishedTasksQueueURL)
     {
+        SQSMethods sqsMethods = SQSMethods.getInstance();
+        try {
+            while(true)
+            {
+                Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL, gotTerminate); //reads only 1 msg
+                if(finishedTask == null)
+                    break;
+                String[] msgBody = finishedTask.body().split("\\$");
+                String result = "", finalMsgQueueName = "";
+                if(msgBody[0].equals("taskfailed")) {
+                    // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
+                    String action = msgBody[1];
+                    String pdfStringUrl = msgBody[2];
+                    finalMsgQueueName = msgBody[3];
+                    String exceptionDesc = msgBody[4];
+                    result = action + "$" + pdfStringUrl + "$" + exceptionDesc + "@";
+                }
+                else {
+                    String original_pdf_url = msgBody[0];
+                    String bucketName = msgBody[1];
+                    String keyName = msgBody[2];
+                    String operation = msgBody[3];
+                    finalMsgQueueName = msgBody[4];
+                    result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "@";
+                }
+
+                int fileSize = map.get(finalMsgQueueName);
+                try
+                {
+                    File f = new File(finalMsgQueueName + ".txt");
+                    PrintWriter out = new PrintWriter(new FileWriter(f, true));
+                    out.println(result);
+                    out.close();
+                    int currFileSize = getFileSize(f);
+                    if(currFileSize == fileSize) //finished all the tasks for certain local application
+                    {
+                        sendSummaryFile(finalMsgQueueName);
+                    }
+                    sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
+                } catch (Exception e)
+                {
+                    System.out.println(e.getMessage());
+                }
+            }
+            sendRemainingFilesToLocalApps();
+        }catch (Exception e)
+        {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    public static void sendSummaryFile(String finalMsgQueueName)
+    {
         S3Methods s3Methods = S3Methods.getInstance();
         SQSMethods sqsMethods = SQSMethods.getInstance();
 
-        while(!gotTerminate.get())
+        File f = new File(finalMsgQueueName + ".txt");
+        String bucket_name = "finishedtasksbucket";
+        if(!s3Methods.isBucketExist(bucket_name))
+            s3Methods.createBucket(bucket_name);
+        String key_name = finalMsgQueueName + System.currentTimeMillis();
+        s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
+
+        String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
+        String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
+        sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
+        map.remove(finalMsgQueueName);
+    }
+
+    public static void sendRemainingFilesToLocalApps()
+    {
+        try {
+            for(String finishLocalAppQueue : map.keySet())
+            {
+                sendSummaryFile(finishLocalAppQueue);
+            }
+        } catch (Exception e)
         {
-            Message finishedTask = sqsMethods.receiveMessage(finishedTasksQueueURL, gotTerminate); //reads only 1 msg
-            if(finishedTask == null)
-                break;
-            String[] msgBody = finishedTask.body().split("\\$");
-            String result = "", finalMsgQueueName = "";
-            if(msgBody[0].equals("taskfailed")) {
-                // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
-                String action = msgBody[1];
-                String pdfStringUrl = msgBody[2];
-                finalMsgQueueName = msgBody[3];
-                String exceptionDesc = msgBody[4];
-                result = action + "$" + pdfStringUrl + "$" + exceptionDesc + "@";
-            }
-            else {
-                String original_pdf_url = msgBody[0];
-                String bucketName = msgBody[1];
-                String keyName = msgBody[2];
-                String operation = msgBody[3];
-                finalMsgQueueName = msgBody[4];
-                result = operation + "$" + original_pdf_url + "$" + bucketName + "$" + keyName + "@";
-            }
-
-            int fileSize = map.get(finalMsgQueueName);
-            try
-            {
-                File f = new File(finalMsgQueueName + ".txt");
-                PrintWriter out = new PrintWriter(new FileWriter(f, true));
-                out.println(result);
-                out.close();
-                int currFileSize = getFileSize(f);
-                if(currFileSize == fileSize) //finished all the tasks for certain local application
-                {
-                    String bucket_name = "finishedtasksbucket";
-                    if(!s3Methods.isBucketExist(bucket_name))
-                        s3Methods.createBucket(bucket_name);
-                    String key_name = finalMsgQueueName + System.currentTimeMillis();
-                    s3Methods.putObject(bucket_name, key_name, f); //uploading the summary file to s3
-
-                    String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
-                    String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
-                    sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
-                }
-                sqsMethods.deleteMessage(finishedTasksQueueURL, finishedTask);
-            } catch (Exception e)
-            {
-                System.out.println(e.getMessage());
-            }
+            System.out.println(e.getMessage());
         }
     }
 
@@ -128,7 +156,7 @@ public class Main {
                 break;
             }
 
-           sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 30 * 60); // 30 min
+            sqsMethods.changeMessageVisibility(queueUrl, msgToProcess, 30 * 60); // 30 min
 
             String[] msg = msgToProcess.body().split("\\$");
             int fileSize = Integer.parseInt(msg[msg.length - 1]);
@@ -140,11 +168,12 @@ public class Main {
 
         //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
         // 1. terminate pool 2. clean resources 3. kill workers 4. kill himself
+        sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
         int totalWorkers = ec2Methods.findWorkersByState("running").size();
         totalWorkers += ec2Methods.findWorkersByState("pending").size();
         pool.shutdownNow();
+        while(!sqsMethods.checkQueueIsEmpty(tasksQueueURL)); //waiting for all the tasks to be handled
         sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
-        sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
 
         ec2Methods.terminateWorkers(totalWorkers);
         gotTerminate.set(true);
