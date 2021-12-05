@@ -59,7 +59,7 @@ The aws credentials are not presented in the files directly. We created a creden
 ### Scalability?
 We considered the scalability matter by the following aspects:
 1. Thread pool - we did not use a TPS (Thread Per Client) methodology because we cannot assign TPS when we have a large amount of client, for example 1 billion clients. Using the thread pool we assigned the maximum number of threads we can in order to process the local application requests simultaneously.
-2. Increasing the number of workers (if needed) - when we receive a job from a local application and n, we calculate the number of needed workers and create them accordingly. This way we scale-up when only it is needed (of course we took in considereation the limitation of 19 ec2 instances we have but potentially our program can increase to an higher numer to support 1 billion of clients for example).
+2. Increasing the number of workers (if needed) - when we receive a job from a local application and n, we calculate the number of needed workers and create them accordingly. This way we scale-up when only it is needed (of course we took in considereation the limitation of 9 ec2 instances we have but potentially our program can increase to an higher numer to support 1 billion of clients for example).
 3. We used linear amount of SQS - we created N SQS when N is the number of local application and 3 more when 2 are for the workers and one is for the all the requests from the local applications. This way we ensure we do not use too much resources than necessary.
 4. We used two S3 buckets - we tried to ensure we do not use too much resources than necessary.
 5.We used linear amount of memory in the manager - we downloaded only the input files of the local applications but not the final files which are used in the summary file that will be sent to an appropriate local application. This way we tried to ensure that the memory of the manager won't run out easily.
@@ -77,4 +77,4 @@ When a termination message is received it acivates the termination flow as descr
 After that, it iterates over the file, and from each line it creates a new task for the workers to handle.
 ### Limitation
 - 100$ in the account: we mostly used the free tier resources to keep up with the budget and used the appropriate resources that can support the task we gave and did not choose randomly with financial considerations.
-- 19 EC2 instances: when we created more EC2 workers instances we limited the creation to 19 as it specified in the students account limitation.
+- 9 EC2 instances: when we created more EC2 workers instances we limited the creation to 9 as it specified in the students account limitation.
