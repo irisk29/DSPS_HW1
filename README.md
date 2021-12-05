@@ -14,6 +14,9 @@ In this assignment you will code a real-world application to distributively proc
       "jarsBucketName" : "<name of the bucket you created>"
     }
    ```
+   arn - represents the IAM Role we will add to the ec2 instances. This role must contain full access to S3, SQS and EC2.
+   security group - should contain the basic rules and SSH rule to allow to connect to an ec2 instance.
+   jars bucket name - must be an unique name in us-east-1 region.
 5. run local app with 4 args:
    1. `args[0]`: input file name path
    2. `args[1]`: output file name
@@ -36,28 +39,40 @@ In this assignment you will code a real-world application to distributively proc
 14. Local Application reads final message from the "malqueue" + localID.
 15. Local Application downloads the summary file from S3.
 16. Local Application creates html output file.
+##Terminatoin Flow
 17. Local application sends a terminate message to the manager if it received terminate as one of its arguments.
 18. If Manager gets termination message, he deletes "tasksqueue".
 19. The Workers see that the "tasksqueue" not exists anymore and they get terminate.
 20. Manager clean the resources and gets terminate.
+![dspshw1flow drawio](https://user-images.githubusercontent.com/48298162/144744422-c58abe04-9201-4869-bd95-36cbdbaede14.png)
+
 ## Technical stuff
-- We used Ubuntu 20.04 based AMI, and instance type of T2-micro
-- when used with 10 Workers and 24 links it takes about 3 minutes (including manager and workers startup time)
+- We used Ubuntu 20.04 based AMI, and instance type of T2-micro for the workers and T2-Medium for the manager.
+- When we run the input-sample-2.txt which contains 100 links with n=10 it took about 2 minutes for the all process to run.
+- When we run the input-sample-1.txt which contains 2500 links with n=139 it took about <to-be-continued> minutes for the all process to run.
 
 ## Considerations
 ### Security
-All our sensitive data and credentials saved on files in our local computer. When we created a new EC2 client we gave the permissions needed for him and therefore there was no need to pass the credentials. For the sensitive data, we transferred it in the User Data and did not write them in plain text.
+The aws credentials are not presented in the files directly. We created a credentials file inside the ~/.aws folder from which we derive the credentials that are needed to perform the necessary actions.
 ### Scalability?
-Yes, on one hand, the Manager doesn't hold local app inforation on the ram, only the amount of "connected" local apps.
-- The personal data such as number of urls remaining and return bucket name are held in temp bucket, its name is the personal return SQS queue of the local app.
-- The Manager app reads the links file that the local app uploaded for him line after line **dynamically** such that it won't be resource consuming to read the hole file.
-- The local app reads the final <link, OCR output> entries from the bucket entry **dynamically** when creating the file.
-- Worker App won't save the image on disk, and reads it to memory **dynamically** (we assume that the image size won't pass 800 MB)
-- We assume that image OCR description won't pass 200 KB
+We considered the scalability matter by the following aspects:
+1. Thread pool - we did not use a TPS (Thread Per Client) methodology because we cannot assign TPS when we have a large amount of client, for example 1 billion clients. Using the thread pool we assigned the maximum number of threads we can in order to process the local application requests simultaneously.
+2. Increasing the number of workers (if needed) - when we receive a job from a local application and n, we calculate the number of needed workers and create them accordingly. This way we scale-up when only it is needed (of course we took in considereation the limitation of 19 ec2 instances we have but potentially our program can increase to an higher numer to support 1 billion of clients for example).
+3. We used linear amount of SQS - we created N SQS when N is the number of local application and 3 more when 2 are for the workers and one is for the all the requests from the local applications. This way we ensure we do not use too much resources than necessary.
+4. We used two S3 buckets - we tried to ensure we do not use too much resources than necessary.
+5.We used linear amount of memory in the manager - we downloaded only the input files of the local applications but not the final files which are used in the summary file that will be sent to an appropriate local application. This way we tried to ensure that the memory of the manager won't run out easily.
 ### Persistence?
-- We're catching all possible exeptions that might rais from the operation of our code, we do not protect against sudden termination from Amazon itself.
+- We're catching all possible exeptions that might raise from the operation of our code.
+- Visibility Timeout: using this mechanism, each message that is hanled by the manager or the workers have limited time in which it is assigned to appropriate ec2 instance. During this time if the ec2 instance that is handling the message, terminates suddenly or stalls, when the visibility timeout is reached the message is back to be visible again to all the instances. This way other worker can handle the task.
+- FIFO SQS: this way we can ensure there are no duplications. So if the commincation broke and a message sent twice we will discard the duplication.
 ### Threads in our application
 Only the Manager uses more then one thread:
-- `proccess wokers finished tasks thread`: responsible for receiving finished messages from workers and append them to the relevant summery file. once summery file is full of all operations, it sends it to the local application. 
-- `waiting for new local application task thread`: waits for new task. for each one it gets, start new thread from the thread poll and waits for new message.
-- `handle new local application task thread`: we manage thread poll for threads that can handle new task - send message for each URL in the file and create the number of needed workers.
+- `proccess wokers finished tasks thread`: responsible for receiving finished tasks from the workers and append them to the relevant summery file. Once a summery file is full with all the results, it sends it to the appropriate local application's SQS. 
+- `waiting for new local application job thread`: This is the main thread of the manager. 
+It waits for new job. A job is an .txt file containing line when every line contains and operation to perform over a link and a link. For each one it gets, it downloads the file locally and passes it to the thread pool, there a thread will be assigned to handle this job. After that, it returns to the beginning and waits for new jobs from the local applications.
+When a termination message is received it acivates the termination flow as described in that section.
+- `handle new local application job thread`: Each thread in the thread pool receive a job which is a file as described above. First it checks if we need more workers than we currently have to proccess the new job. If we do, it creates the necessary amount of workers.
+After that, it iterates over the file, and from each line it creates a new task for the workers to handle.
+### Limitation
+- 100$ in the account: we mostly used the free tier resources to keep up with the budget and used the appropriate resources that can support the task we gave and did not choose randomly with financial considerations.
+- 19 EC2 instances: when we created more EC2 workers instances we limited the creation to 19 as it specified in the students account limitation.
