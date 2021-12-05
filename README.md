@@ -39,6 +39,7 @@ In this assignment you will code a real-world application to distributively proc
 14. Local Application reads final message from the "malqueue" + localID.
 15. Local Application downloads the summary file from S3.
 16. Local Application creates html output file.
+
 ##Terminatoin Flow
 17. Local application sends a terminate message to the manager if it received terminate as one of its arguments.
 18. If Manager gets termination message, he deletes "tasksqueue".
