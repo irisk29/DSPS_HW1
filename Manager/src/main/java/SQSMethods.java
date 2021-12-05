@@ -53,7 +53,7 @@ public class SQSMethods {
                     .maxNumberOfMessages(1)
                     .build();
             messages = sqsClient.receiveMessage(receiveMessageRequest).messages();
-            if(gotTerminate.get()) return null;
+            if(gotTerminate.get() && messages.isEmpty()) return null;
         } while (messages.isEmpty());
         // return only the first message each call
         return messages.get(0);

@@ -111,6 +111,7 @@ public class Main {
         String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
         String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
         sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
+        map.put(finalMsgQueueName, -1);
     }
 
     public static void sendRemainingFilesToLocalApps()
@@ -118,7 +119,8 @@ public class Main {
         try {
             for(String finishLocalAppQueue : map.keySet())
             {
-                sendSummaryFile(finishLocalAppQueue);
+                if(map.get(finishLocalAppQueue) != -1)
+                    sendSummaryFile(finishLocalAppQueue);
             }
         } catch (Exception e)
         {
@@ -178,7 +180,6 @@ public class Main {
         totalWorkers += ec2Methods.findWorkersByState("pending").size();
         ec2Methods.terminateWorkers(totalWorkers);
 
-        while(!sqsMethods.checkQueueIsEmpty(finishedTasksQueueURL)); // waiting for all the finished tasks to be read
         gotTerminate.set(true);
         try {
             buildFinalFileThread.join();
