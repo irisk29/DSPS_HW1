@@ -40,11 +40,12 @@ In this assignment you will code a real-world application to distributively proc
 15. Local Application downloads the summary file from S3.
 16. Local Application creates html output file.
 
-##Terminatoin Flow
+## Terminatoin Flow
 17. Local application sends a terminate message to the manager if it received terminate as one of its arguments.
 18. If Manager gets termination message, he deletes "tasksqueue".
 19. The Workers see that the "tasksqueue" not exists anymore and they get terminate.
 20. Manager clean the resources and gets terminate.
+
 ![dspshw1flow drawio](https://user-images.githubusercontent.com/48298162/144744422-c58abe04-9201-4869-bd95-36cbdbaede14.png)
 
 ## Technical stuff
