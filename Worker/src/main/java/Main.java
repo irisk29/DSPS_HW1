@@ -26,7 +26,7 @@ public class Main {
                 try
                 {
                     Message message = sqsMethods.receiveMessage(tasksQueueUrl);
-                    sqsMethods.changeMessageVisibility(tasksQueueUrl, message, 60); //1 min to process
+                    sqsMethods.changeMessageVisibility(tasksQueueUrl, message, 60); // 1 min to process
                     String[] msgData = message.body().split("\\t");
                     String action = msgData[0];
                     String pdfStringUrl = msgData[1];

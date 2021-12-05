@@ -4,6 +4,7 @@ import software.amazon.awssdk.services.sqs.model.*;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 public class SQSMethods {
     private static SQSMethods SQSMethods_instance = null;
@@ -54,6 +55,7 @@ public class SQSMethods {
             sqsClient.sendMessage(SendMessageRequest.builder()
                     .queueUrl(queueUrl)
                     .messageGroupId(messageGroupId)
+                    .messageDeduplicationId(UUID.randomUUID().toString() + System.currentTimeMillis())
                     .messageBody(msgBody)
                     .build());
         } catch (SqsException e) {

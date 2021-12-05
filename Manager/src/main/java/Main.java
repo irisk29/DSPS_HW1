@@ -45,6 +45,7 @@ public class Main {
     public static void processFinishedTasks(String finishedTasksQueueURL)
     {
         SQSMethods sqsMethods = SQSMethods.getInstance();
+        String finalMsgQueueName = "";
         try {
             while(true)
             {
@@ -52,7 +53,7 @@ public class Main {
                 if(finishedTask == null)
                     break;
                 String[] msgBody = finishedTask.body().split("\\$");
-                String result = "", finalMsgQueueName = "";
+                String result = "";
                 if(msgBody[0].equals("taskfailed")) {
                     // action + "$" + pdfStringUrl + "$" + localAppID + "$" + resultFilePath.getValue();
                     String action = msgBody[1];
@@ -91,7 +92,7 @@ public class Main {
             sendRemainingFilesToLocalApps();
         }catch (Exception e)
         {
-            System.out.println(e.getMessage());
+            System.out.println(e.getMessage() + " " + finalMsgQueueName);
         }
     }
 
@@ -110,7 +111,6 @@ public class Main {
         String doneMsg = bucket_name + "$" + key_name; //location of the summary file in s3
         String finalMsgQueueUrl = sqsMethods.getQueueUrl(finalMsgQueueName);
         sqsMethods.SendMessage(finalMsgQueueUrl, doneMsg);
-        map.remove(finalMsgQueueName);
     }
 
     public static void sendRemainingFilesToLocalApps()
@@ -166,22 +166,26 @@ public class Main {
             pool.execute(task);
         }
 
-        //If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
+        // If got here - we got TERMINATE message - stopped looking for new tasks and to create summary files
         // 1. terminate pool 2. clean resources 3. kill workers 4. kill himself
         sqsMethods.deleteSQSQueue(queueUrl); // no more receiving requests from local applications
-        int totalWorkers = ec2Methods.findWorkersByState("running").size();
-        totalWorkers += ec2Methods.findWorkersByState("pending").size();
         pool.shutdownNow();
-        while(!sqsMethods.checkQueueIsEmpty(tasksQueueURL)); //waiting for all the tasks to be handled
+
+        while(!sqsMethods.checkQueueIsEmpty(tasksQueueURL)); // waiting for all the tasks to be handled
         sqsMethods.deleteSQSQueue(tasksQueueURL); // no more tasks will be sent to the workers
 
+        int totalWorkers = ec2Methods.findWorkersByState("running").size();
+        totalWorkers += ec2Methods.findWorkersByState("pending").size();
         ec2Methods.terminateWorkers(totalWorkers);
+
+        while(!sqsMethods.checkQueueIsEmpty(finishedTasksQueueURL)); // waiting for all the finished tasks to be read
         gotTerminate.set(true);
         try {
             buildFinalFileThread.join();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
         sqsMethods.deleteSQSQueue(finishedTasksQueueURL); // no more processing finished tasks
         ec2Methods.terminateManager();
     }
