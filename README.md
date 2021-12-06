@@ -40,7 +40,7 @@ In this assignment you will code a real-world application to distributively proc
 
 ![dspshw1flow drawio](https://user-images.githubusercontent.com/48298162/144744422-c58abe04-9201-4869-bd95-36cbdbaede14.png)
 
-## Terminatoin Flow
+## Termination Flow
 1. Local application sends a terminate message to the manager if it received terminate as one of its arguments.
 2. If Manager gets termination message, he deletes "lamqueue" for not getting more tasks from local applications.
 3. Stops all threads that sends new messages to "tasksqueue".
