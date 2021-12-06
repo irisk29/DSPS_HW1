@@ -51,7 +51,7 @@ In this assignment you will code a real-world application to distributively proc
 8. The Manager gets terminate.
 
 ## Technical stuff
-- We used Ubuntu 20.04 based AMI, and instance type of T2-micro for the workers and T2-Medium for the manager.
+- We used Linux-Kernel 5.10 AMI, and instance type of T2-micro for the workers and T2-Medium for the manager.
 - When we run the input-sample-1.txt which contains 2500 links with n=250 it took about 15 minutes for the all process to run.
 - When we run the input-sample-2.txt which contains 100 links with n=10 it took about 2 minutes for the all process to run.
 
