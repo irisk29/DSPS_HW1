@@ -58,14 +58,14 @@ In this assignment you will code a real-world application to distributively proc
 ## Considerations
 ### Security
 The aws credentials are not presented in plain text. We created a credentials file inside the ~/.aws folder from which we derive the credentials that are needed to perform the necessary actions. Other private data that we didn't want to be expose to anyone (ami, arn, securityGroupId, ect.), we read from json file which exists only on our local device.
-### Scalability?
+### Scalability
 We considered the scalability matter by the following aspects:
 1. Thread pool - we did not use a TPS (Thread Per Client) methodology because we cannot assign TPS when we have a large amount of client, for example 1 billion clients. Using the thread pool we assigned the maximum number of threads we can in order to process the local application requests simultaneously.
 2. Increasing the number of workers (if needed) - when we receive a job from a local application and n, we calculate the number of needed workers and create them accordingly. This way we scale-up when only it is needed (of course we took in considereation the limitation of 8 ec2 instances we have but potentially our program can increase to an higher numer to support 1 billion of clients for example).
 3. We used linear amount of SQS - we created N SQS when N is the number of local application. This way we ensure we do not use too much resources than necessary.
 4. We used two S3 buckets - we tried to ensure we do not use too much resources than necessary.
 5. We used linear amount of memory in the manager - we downloaded only the input files of the local applications but not the final files which are used in the summary file that will be sent to an appropriate local application. This way we tried to ensure that the memory of the manager won't run out easily.
-### Persistence?
+### Persistence
 - We're catching all possible exeptions that might raise from the operation of our code.
 - Visibility Timeout: using this mechanism, each message that is hanled by the manager or the workers have limited time in which it is assigned to appropriate ec2 instance. During this time if the ec2 instance that is handling the message, terminates suddenly or stalls, when the visibility timeout is reached the message is back to be visible again to all the instances. This way other worker can handle the task.
 - FIFO SQS + Message Duplication ID: this way we can ensure there are no duplications. So if the commincation broke and a message sent twice we will discard the duplication.
