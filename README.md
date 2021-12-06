@@ -78,4 +78,3 @@ When a termination message is received it acivates the termination flow as descr
 ### Limitation
 - Number of EC2 clients: we ensure that we never creates more than <aws limitation number> EC2 clients.
 - 100$ in the account: we mostly used the free tier resources to keep up with the budget and used the appropriate resources that can support the task we gave and did not choose randomly with financial considerations.
-- 9 EC2 instances: when we created more EC2 workers instances we limited the creation to 9 as it specified in the students account limitation.
