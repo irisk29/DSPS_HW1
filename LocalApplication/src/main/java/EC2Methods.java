@@ -88,6 +88,7 @@ public class EC2Methods {
                     """
                     cd /
                     java -jar Manager.jar""" + " " + AMI + " " + KEY_NAME + " " + IAM_ROLE + " " + SECURITY_ID + " " + JAR_BUCKET;
+
             RunInstancesRequest runRequest = RunInstancesRequest.builder()
                     .imageId(AMI)
                     .instanceType(instanceType)

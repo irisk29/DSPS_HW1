@@ -111,7 +111,7 @@ public class SQSMethods {
     public String createQueue(String queueNameToCreate)
     {
         try {
-            String queueName = queueNameToCreate + System.currentTimeMillis() + ".fifo"; //msg only sent once
+            String queueName = queueNameToCreate + ".fifo"; //msg only sent once
             Map<String, String> attributes = new HashMap<String, String>();
             attributes.put("FifoQueue", "true");
             attributes.put("ContentBasedDeduplication", "true");
